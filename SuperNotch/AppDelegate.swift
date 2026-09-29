@@ -142,8 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(openPocketbook)
 
         let pocketbookSettings = NSMenuItem(
-            title: "Pocketbook Settings…",
-            action: #selector(openPocketbookSettings),
+            title: "Settings…",
+            action: #selector(openSettings),
             keyEquivalent: ""
         )
         pocketbookSettings.target = self
@@ -188,16 +188,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         terminalShortcut.target = self
         menu.addItem(terminalShortcut)
         terminalShortcutItem = terminalShortcut
-
-        menu.addItem(.separator())
-
-        let checkUpdates = NSMenuItem(
-            title: "Check for Updates…",
-            action: #selector(checkForUpdates),
-            keyEquivalent: ""
-        )
-        checkUpdates.target = self
-        menu.addItem(checkUpdates)
 
         menu.addItem(.separator())
 
@@ -403,9 +393,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pocketbook.toggle()
     }
 
-    @objc private func openPocketbookSettings() {
+    @objc private func openSettings() {
         terminal.hide()
-        pocketbook.showSettings()
+        pocketbook.showSettings(section: .general)
     }
 
     @objc private func configurePocketbookShortcut() {
