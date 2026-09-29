@@ -142,8 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(openPocketbook)
 
         let pocketbookSettings = NSMenuItem(
-            title: "Pocketbook Settings…",
-            action: #selector(openPocketbookSettings),
+            title: "Settings…",
+            action: #selector(openSettings),
             keyEquivalent: ""
         )
         pocketbookSettings.target = self
@@ -384,14 +384,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         coordinator.clearRecentProject()
     }
 
+    @objc private func checkForUpdates() {
+        SuperNotchUpdateController.shared.checkForUpdates()
+    }
+
     @objc private func openPocketbookAction() {
         terminal.hide()
         pocketbook.toggle()
     }
 
-    @objc private func openPocketbookSettings() {
+    @objc private func openSettings() {
         terminal.hide()
-        pocketbook.showSettings()
+        pocketbook.showSettings(section: .general)
     }
 
     @objc private func configurePocketbookShortcut() {

@@ -2,7 +2,38 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-// MARK: - Settings
+enum SuperNotchSettingsSection: String, CaseIterable, Identifiable {
+    case general
+    case dropZone
+    case pocketbook
+    case terminal
+    case updates
+    case about
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general: return "General"
+        case .dropZone: return "Drop Zone"
+        case .pocketbook: return "Pocketbook"
+        case .terminal: return "Terminal"
+        case .updates: return "Updates"
+        case .about: return "About"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .general: return "gearshape"
+        case .dropZone: return "shippingbox"
+        case .pocketbook: return "books.vertical"
+        case .terminal: return "terminal"
+        case .updates: return "arrow.triangle.2.circlepath"
+        case .about: return "info.circle"
+        }
+    }
+}
 
 @MainActor
 final class PocketbookV3SettingsWindowController: NSObject, NSWindowDelegate {
@@ -11,6 +42,7 @@ final class PocketbookV3SettingsWindowController: NSObject, NSWindowDelegate {
     private let configureShortcut: () -> Void
     private let onChanged: () -> Void
     private var window: NSWindow?
+    private var selection = SuperNotchSettingsSelection()
 
     init(
         configuration: PocketbookV3Configuration,
@@ -24,23 +56,26 @@ final class PocketbookV3SettingsWindowController: NSObject, NSWindowDelegate {
         self.onChanged = onChanged
     }
 
-    func show() {
+    func show(section: SuperNotchSettingsSection = .pocketbook) {
         configuration.reloadCustom()
+        selection.section = section
 
         if window == nil {
-            let frame = NSRect(x: 0, y: 0, width: 520, height: 520)
+            let frame = NSRect(x: 0, y: 0, width: 880, height: 610)
             let window = NSWindow(
                 contentRect: frame,
-                styleMask: [.titled, .closable, .miniaturizable],
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered,
                 defer: false
             )
             window.title = "SuperNotch Settings"
+            window.minSize = NSSize(width: 760, height: 520)
             window.isReleasedWhenClosed = false
             window.center()
             window.delegate = self
             window.contentView = NSHostingView(
-                rootView: PocketbookV3SettingsView(
+                rootView: SuperNotchSettingsView(
+                    selection: selection,
                     configuration: configuration,
                     shortcutDescription: shortcutDescription,
                     configureShortcut: configureShortcut,
@@ -55,124 +90,213 @@ final class PocketbookV3SettingsWindowController: NSObject, NSWindowDelegate {
     }
 }
 
-struct PocketbookV3SettingsView: View {
+@MainActor
+private final class SuperNotchSettingsSelection: ObservableObject {
+    @Published var section: SuperNotchSettingsSection = .pocketbook
+}
+
+private struct SuperNotchSettingsView: View {
+    @ObservedObject var selection: SuperNotchSettingsSelection
     @ObservedObject var configuration: PocketbookV3Configuration
     let shortcutDescription: () -> String
     let configureShortcut: () -> Void
     let onChanged: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Pocketbook")
-                        .font(.system(size: 20, weight: .semibold))
-                    Text("Choose exactly which books appear when the notch Pocketbook opens.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+        NavigationSplitView {
+            List(SuperNotchSettingsSection.allCases, selection: $selection.section) { section in
+                Label(section.title, systemImage: section.icon)
+                    .tag(section)
+                    .padding(.vertical, 3)
+            }
+            .navigationSplitViewColumnWidth(min: 180, ideal: 205, max: 235)
+        } detail: {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
+                    content
                 }
+                .padding(28)
+                .frame(maxWidth: 720, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(minWidth: 760, minHeight: 520)
+    }
 
-                settingsCard(title: "Built-in Books") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(configuration.builtinBooks) { book in
-                            bookToggle(book)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(selection.section.title)
+                .font(.system(size: 24, weight: .semibold))
+            Text(subtitle)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+        }
+    }
 
-                settingsCard(title: "Custom JSON") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(configuration.configURL.path)
-                            .font(.system(size: 10.5, design: .monospaced))
+    private var subtitle: String {
+        switch selection.section {
+        case .general: return "SuperNotch behavior and app-level preferences."
+        case .dropZone: return "Developer Drop Zone preferences live here instead of crowding the menu bar."
+        case .pocketbook: return "Choose books and configure the Pocketbook shortcut."
+        case .terminal: return "Native terminal preferences and shortcut."
+        case .updates: return "Keep SuperNotch current from the official GitHub releases."
+        case .about: return "Version and project information."
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch selection.section {
+        case .general:
+            card("Application") {
+                Text("SuperNotch runs as a menu-bar accessory and keeps the physical notch as the primary workspace surface.")
+                    .foregroundStyle(.secondary)
+            }
+        case .dropZone:
+            card("Developer Drop Zone") {
+                Text("Default opener and recent-project actions remain available from the compact menu while their configuration is being moved into this Settings workspace.")
+                    .foregroundStyle(.secondary)
+            }
+        case .pocketbook:
+            pocketbookContent
+        case .terminal:
+            card("Global Shortcut") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Open SuperNotch Terminal")
+                        Text("Configure the terminal shortcut from the menu-bar command.")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-
-                        if let error = configuration.customError {
-                            Label(error, systemImage: "exclamationmark.triangle.fill")
-                                .font(.system(size: 10.5))
-                                .foregroundStyle(.orange)
-                        }
-
-                        if configuration.customBooks.isEmpty {
-                            Text(configuration.customFileExists
-                                ? "No custom books found in the JSON file."
-                                : "No custom config yet. Create one to add personal books or override built-in entries.")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(configuration.customBooks) { book in
-                                bookToggle(book)
-                            }
-                        }
-
-                        HStack {
-                            Button(configuration.customFileExists ? "Open Config" : "Create Config") {
-                                configuration.openConfig()
-                                onChanged()
-                            }
-                            Button("Reload") {
-                                configuration.reloadCustom()
-                                onChanged()
-                            }
-                        }
                     }
+                    Spacer()
+                    Text("⇧⌘N")
+                        .font(.system(.body, design: .rounded).weight(.semibold))
                 }
-
-                settingsCard(title: "Default Book") {
-                    if configuration.enabledBooks.isEmpty {
-                        Text("Enable at least one book. Until then Pocketbook opens with an empty state.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Picker(
-                            "Open on",
-                            selection: Binding(
-                                get: { configuration.resolvedDefaultBook?.id ?? "" },
-                                set: {
-                                    configuration.setDefaultBook($0)
-                                    onChanged()
-                                }
-                            )
-                        ) {
-                            ForEach(configuration.enabledBooks) { book in
-                                Text(book.title).tag(book.id)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                    }
-                }
-
-                settingsCard(title: "Shortcut") {
+            }
+        case .updates:
+            card("Software Update") {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Global Pocketbook Shortcut")
-                                .font(.system(size: 12, weight: .medium))
-                            Text(shortcutDescription())
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Current version")
+                            Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button("Change…", action: configureShortcut)
+                        Button("Check for Updates…") {
+                            SuperNotchUpdateController.shared.checkForUpdates()
+                        }
+                    }
+                    Divider()
+                    Text("Updates are checked against official SuperNotch GitHub Releases.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        case .about:
+            card("SuperNotch") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("SuperNotch")
+                        .font(.title3.weight(.semibold))
+                    Text("Version " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"))
+                        .foregroundStyle(.secondary)
+                    Text("A native productivity command surface built around your MacBook notch.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var pocketbookContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            card("Built-in Books") {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(configuration.builtinBooks) { book in
+                        bookToggle(book)
                     }
                 }
             }
-            .padding(24)
+
+            card("Custom JSON") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(configuration.configURL.path)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+
+                    if let error = configuration.customError {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.orange)
+                    }
+
+                    if configuration.customBooks.isEmpty {
+                        Text(configuration.customFileExists
+                            ? "No custom books found in the JSON file."
+                            : "No custom config yet. Create one to add personal books or override built-in entries.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(configuration.customBooks) { book in bookToggle(book) }
+                    }
+
+                    HStack {
+                        Button(configuration.customFileExists ? "Open Config" : "Create Config") {
+                            configuration.openConfig()
+                            onChanged()
+                        }
+                        Button("Reload") {
+                            configuration.reloadCustom()
+                            onChanged()
+                        }
+                    }
+                }
+            }
+
+            card("Default Book") {
+                if configuration.enabledBooks.isEmpty {
+                    Text("Enable at least one book.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("Open on", selection: Binding(
+                        get: { configuration.resolvedDefaultBook?.id ?? "" },
+                        set: {
+                            configuration.setDefaultBook($0)
+                            onChanged()
+                        }
+                    )) {
+                        ForEach(configuration.enabledBooks) { book in
+                            Text(book.title).tag(book.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+
+            card("Global Shortcut") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Open Pocketbook")
+                        Text(shortcutDescription())
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    }
+                    Spacer()
+                    Button("Change…", action: configureShortcut)
+                }
+            }
         }
-        .frame(minWidth: 500, minHeight: 500)
     }
 
     @ViewBuilder
-    private func settingsCard<Content: View>(
-        title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func card<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 13, weight: .semibold))
             content()
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -183,32 +307,25 @@ struct PocketbookV3SettingsView: View {
     private func bookToggle(_ book: PocketbookV3Book) -> some View {
         HStack(spacing: 10) {
             Image(systemName: book.icon)
-                .frame(width: 24, alignment: .center)
-
+                .frame(width: 24)
             VStack(alignment: .leading, spacing: 1) {
-                Text(book.title)
-                    .font(.system(size: 12, weight: .medium))
+                Text(book.title).font(.system(size: 12, weight: .medium))
                 Text(book.isBuiltin ? "Built in" : "Custom JSON")
                     .font(.system(size: 9.5))
                     .foregroundStyle(.secondary)
             }
-
-            Spacer(minLength: 16)
-
-            Toggle(
-                "",
-                isOn: Binding(
-                    get: { configuration.isEnabled(book.id) },
-                    set: {
-                        configuration.setEnabled(book.id, enabled: $0)
-                        onChanged()
-                    }
-                )
-            )
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { configuration.isEnabled(book.id) },
+                set: {
+                    configuration.setEnabled(book.id, enabled: $0)
+                    onChanged()
+                }
+            ))
             .labelsHidden()
             .toggleStyle(.switch)
         }
-        .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 36)
     }
 }
 

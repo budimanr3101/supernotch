@@ -232,7 +232,7 @@ final class PocketbookFeatureV3 {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: dismissal)
     }
 
-    func showSettings() {
+    func showSettings(section: SuperNotchSettingsSection = .pocketbook) {
         let wasVisible = isVisible
         if wasVisible { hide() }
 
@@ -250,7 +250,7 @@ final class PocketbookFeatureV3 {
 
         let showBlock: () -> Void = { [weak self] in
             guard let self = self else { return }
-            self.settingsController?.show()
+            self.settingsController?.show(section: section)
         }
         if wasVisible {
             DispatchQueue.main.asyncAfter(
