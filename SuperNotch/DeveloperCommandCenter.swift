@@ -2,7 +2,7 @@ import SwiftUI
 
 struct DeveloperCommandCenterView: View {
     @ObservedObject private var registry = SuperNotchFeatureRegistry.shared
-    @State private var snapshot = SuperNotchSystemSnapshot.current()
+    @StateObject private var monitor = SuperNotchSystemMonitor()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -16,7 +16,7 @@ struct DeveloperCommandCenterView: View {
                 }
                 Spacer()
                 Button {
-                    snapshot = .current()
+                    monitor.refresh()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -26,9 +26,9 @@ struct DeveloperCommandCenterView: View {
 
             if registry.isEnabled(.systemPulse) {
                 HStack(spacing: 10) {
-                    metric("CPU", value: snapshot.cpuPercent, icon: "cpu")
-                    metric("Memory", value: snapshot.memoryPercent, icon: "memorychip")
-                    metric("Disk", value: snapshot.diskPercent, icon: "internaldrive")
+                    metric("CPU", value: monitor.snapshot.cpuPercent, icon: "cpu")
+                    metric("Memory", value: monitor.snapshot.memoryPercent, icon: "memorychip")
+                    metric("Disk", value: monitor.snapshot.diskPercent, icon: "internaldrive")
                 }
             }
 
@@ -55,6 +55,13 @@ struct DeveloperCommandCenterView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.primary.opacity(0.045))
         )
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard !Task.isCancelled else { break }
+                monitor.refresh()
+            }
+        }
     }
 
     private func metric(_ title: String, value: Int, icon: String) -> some View {
@@ -85,8 +92,15 @@ struct SuperNotchFeatureSettingsView: View {
                     Image(systemName: feature.icon)
                         .frame(width: 24)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(feature.title)
-                            .font(.system(size: 13, weight: .medium))
+                        HStack(spacing: 6) {
+                            Text(feature.title)
+                                .font(.system(size: 13, weight: .medium))
+                            if feature.isCore {
+                                Text("CORE")
+                                    .font(.system(size: 8.5, weight: .bold))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                         Text(feature.subtitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
