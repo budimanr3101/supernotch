@@ -191,6 +191,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let checkUpdates = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        checkUpdates.target = self
+        menu.addItem(checkUpdates)
+
+        menu.addItem(.separator())
+
         let quit = NSMenuItem(
             title: "Quit SuperNotch",
             action: #selector(NSApplication.terminate(_:)),
@@ -382,6 +392,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func clearRecentProject() {
         coordinator.clearRecentProject()
+    }
+
+    @objc private func checkForUpdates() {
+        SuperNotchUpdateController.shared.checkForUpdates()
     }
 
     @objc private func openPocketbookAction() {
