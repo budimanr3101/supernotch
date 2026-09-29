@@ -106,11 +106,18 @@ struct SuperNotchFeatureSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Toggle("", isOn: Binding(
-                        get: { registry.isEnabled(feature) },
-                        set: { registry.setEnabled(feature, enabled: $0) }
-                    ))
-                    .labelsHidden()
+
+                    if feature.isCore {
+                        Text("Always on")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Toggle("", isOn: Binding(
+                            get: { registry.isEnabled(feature) },
+                            set: { registry.setEnabled(feature, enabled: $0) }
+                        ))
+                        .labelsHidden()
+                    }
                 }
                 .padding(.vertical, 4)
 
