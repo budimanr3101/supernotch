@@ -4,6 +4,8 @@ import SwiftUI
 
 enum SuperNotchSettingsSection: String, CaseIterable, Identifiable {
     case general
+    case commandCenter
+    case features
     case dropZone
     case pocketbook
     case terminal
@@ -15,6 +17,8 @@ enum SuperNotchSettingsSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return "General"
+        case .commandCenter: return "Command Center"
+        case .features: return "Features"
         case .dropZone: return "Drop Zone"
         case .pocketbook: return "Pocketbook"
         case .terminal: return "Terminal"
@@ -26,6 +30,8 @@ enum SuperNotchSettingsSection: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .general: return "gearshape"
+        case .commandCenter: return "rectangle.grid.2x2"
+        case .features: return "slider.horizontal.3"
         case .dropZone: return "shippingbox"
         case .pocketbook: return "books.vertical"
         case .terminal: return "terminal"
@@ -137,6 +143,8 @@ private struct SuperNotchSettingsView: View {
     private var subtitle: String {
         switch selection.section {
         case .general: return "SuperNotch behavior and app-level preferences."
+        case .commandCenter: return "A compact developer dashboard for useful signals and shortcuts."
+        case .features: return "Choose which SuperNotch modules are active."
         case .dropZone: return "Developer Drop Zone preferences live here instead of crowding the menu bar."
         case .pocketbook: return "Choose books and configure the Pocketbook shortcut."
         case .terminal: return "Native terminal preferences and shortcut."
@@ -151,6 +159,12 @@ private struct SuperNotchSettingsView: View {
             card("Application") {
                 Text("SuperNotch runs as a menu-bar accessory and keeps the physical notch as the primary workspace surface.")
                     .foregroundStyle(.secondary)
+            }
+        case .commandCenter:
+            DeveloperCommandCenterView()
+        case .features:
+            card("Modules") {
+                SuperNotchFeatureSettingsView()
             }
         case .dropZone:
             card("Developer Drop Zone") {

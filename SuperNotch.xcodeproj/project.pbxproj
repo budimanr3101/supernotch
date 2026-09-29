@@ -26,6 +26,8 @@
 		A10000000000000000000013 /* NotchTerminalNative.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* NotchTerminalNative.swift */; };
 		A10000000000000000000014 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* Assets.xcassets */; };
 		A10000000000000000000015 /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* UpdateController.swift */; };
+		A10000000000000000000016 /* FeatureRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* FeatureRegistry.swift */; };
+		A10000000000000000000017 /* DeveloperCommandCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* DeveloperCommandCenter.swift */; };
 		A20000000000000000000001 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = J20000000000000000000001 /* SwiftTerm */; };
 /* End PBXBuildFile section */
 
@@ -51,6 +53,8 @@
 		B10000000000000000000013 /* NotchTerminalNative.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchTerminalNative.swift; sourceTree = "<group>"; };
 		B10000000000000000000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10000000000000000000015 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
+		B10000000000000000000016 /* FeatureRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureRegistry.swift; sourceTree = "<group>"; };
+		B10000000000000000000017 /* DeveloperCommandCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperCommandCenter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -80,6 +84,8 @@
 				B10000000000000000000002 /* AppDelegate.swift */,
 				B10000000000000000000013 /* NotchTerminalNative.swift */,
 				B10000000000000000000015 /* UpdateController.swift */,
+				B10000000000000000000016 /* FeatureRegistry.swift */,
+				B10000000000000000000017 /* DeveloperCommandCenter.swift */,
 				B10000000000000000000003 /* ShelfCoordinator.swift */,
 				B10000000000000000000004 /* ShelfStore.swift */,
 				B10000000000000000000005 /* FinderBridge.swift */,
@@ -187,6 +193,8 @@
 				A10000000000000000000002 /* AppDelegate.swift in Sources */,
 				A10000000000000000000013 /* NotchTerminalNative.swift in Sources */,
 				A10000000000000000000015 /* UpdateController.swift in Sources */,
+				A10000000000000000000016 /* FeatureRegistry.swift in Sources */,
+				A10000000000000000000017 /* DeveloperCommandCenter.swift in Sources */,
 				A10000000000000000000003 /* ShelfCoordinator.swift in Sources */,
 				A10000000000000000000004 /* ShelfStore.swift in Sources */,
 				A10000000000000000000005 /* FinderBridge.swift in Sources */,
