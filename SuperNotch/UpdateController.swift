@@ -1,132 +1,237 @@
 import AppKit
-import Foundation
+import Sparkle
+import SwiftUI
 
 @MainActor
-final class SuperNotchUpdateController {
+final class SuperNotchUpdateController: NSObject, ObservableObject, SPUUpdaterDelegate {
     static let shared = SuperNotchUpdateController()
 
-    private let latestReleaseURL = URL(string: "https://api.github.com/repos/budimanr3101/supernotch/releases/latest")!
-    private let session: URLSession
-    private var alert: NSAlert?
+    @Published private(set) var isChecking = false
+    @Published private(set) var updateAvailable = false
+    @Published private(set) var latestVersion: String?
+    @Published private(set) var lastErrorMessage: String?
 
-    private init() {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.timeoutIntervalForRequest = 15
-        session = URLSession(configuration: configuration)
+    private var started = false
+
+    private lazy var standardUpdaterController = SPUStandardUpdaterController(
+        startingUpdater: false,
+        updaterDelegate: self,
+        userDriverDelegate: nil
+    )
+
+    private override init() {
+        super.init()
     }
 
-    func checkForUpdates() {
-        let current = currentVersion
-        Task {
-            do {
-                var request = URLRequest(url: latestReleaseURL)
-                request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-                request.setValue("SuperNotch/\(current)", forHTTPHeaderField: "User-Agent")
-
-                let (data, response) = try await session.data(for: request)
-                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                    throw UpdateError.releaseUnavailable
-                }
-
-                let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
-                let latest = release.tagName.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
-                guard isNewer(latest, than: current) else {
-                    showUpToDate(version: current)
-                    return
-                }
-
-                guard let dmg = release.assets.first(where: { $0.name == "SuperNotch.dmg" }) else {
-                    throw UpdateError.missingDMG
-                }
-                showUpdateAvailable(current: current, latest: latest, downloadURL: dmg.browserDownloadURL)
-            } catch {
-                showError(error)
-            }
-        }
-    }
-
-    private var currentVersion: String {
+    var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
     }
 
-    private func isNewer(_ candidate: String, than current: String) -> Bool {
-        candidate.compare(current, options: .numeric) == .orderedDescending
+    var currentBuild: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
     }
 
-    private func showUpToDate(version: String) {
-        let alert = NSAlert()
-        alert.messageText = "SuperNotch is up to date"
-        alert.informativeText = "You're running SuperNotch \(version)."
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
-        present(alert)
+    var canCheckForUpdates: Bool {
+        started && standardUpdaterController.updater.canCheckForUpdates
     }
 
-    private func showUpdateAvailable(current: String, latest: String, downloadURL: URL) {
-        let alert = NSAlert()
-        alert.messageText = "SuperNotch \(latest) is available"
-        alert.informativeText = "You're running \(current). Download the latest release and replace SuperNotch in Applications."
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Download Update")
-        alert.addButton(withTitle: "Later")
-        self.alert = alert
-
-        NSApp.activate(ignoringOtherApps: true)
-        let response = alert.runModal()
-        self.alert = nil
-        if response == .alertFirstButtonReturn {
-            NSWorkspace.shared.open(downloadURL)
+    var automaticallyChecksForUpdates: Bool {
+        get { standardUpdaterController.updater.automaticallyChecksForUpdates }
+        set {
+            standardUpdaterController.updater.automaticallyChecksForUpdates = newValue
+            objectWillChange.send()
         }
     }
 
-    private func showError(_ error: Error) {
-        let alert = NSAlert()
-        alert.messageText = "Couldn't check for updates"
-        alert.informativeText = error.localizedDescription
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "OK")
-        present(alert)
-    }
-
-    private func present(_ alert: NSAlert) {
-        self.alert = alert
-        NSApp.activate(ignoringOtherApps: true)
-        alert.runModal()
-        self.alert = nil
-    }
-}
-
-private struct GitHubRelease: Decodable {
-    let tagName: String
-    let assets: [GitHubReleaseAsset]
-
-    enum CodingKeys: String, CodingKey {
-        case tagName = "tag_name"
-        case assets
-    }
-}
-
-private struct GitHubReleaseAsset: Decodable {
-    let name: String
-    let browserDownloadURL: URL
-
-    enum CodingKeys: String, CodingKey {
-        case name
-        case browserDownloadURL = "browser_download_url"
-    }
-}
-
-private enum UpdateError: LocalizedError {
-    case releaseUnavailable
-    case missingDMG
-
-    var errorDescription: String? {
-        switch self {
-        case .releaseUnavailable:
-            return "The latest SuperNotch release could not be reached. Check your internet connection and try again."
-        case .missingDMG:
-            return "The latest GitHub release does not contain SuperNotch.dmg."
+    var automaticallyDownloadsUpdates: Bool {
+        get { standardUpdaterController.updater.automaticallyDownloadsUpdates }
+        set {
+            standardUpdaterController.updater.automaticallyDownloadsUpdates = newValue
+            objectWillChange.send()
         }
+    }
+
+    var allowsAutomaticUpdates: Bool {
+        standardUpdaterController.updater.allowsAutomaticUpdates
+    }
+
+    var lastUpdateCheckDate: Date? {
+        standardUpdaterController.updater.lastUpdateCheckDate
+    }
+
+    func start() {
+        guard !started else { return }
+        started = true
+        standardUpdaterController.startUpdater()
+        objectWillChange.send()
+        NSLog("[SuperNotch] Sparkle OTA updater started")
+    }
+
+    func checkForUpdates() {
+        if !started { start() }
+        guard standardUpdaterController.updater.canCheckForUpdates else { return }
+        isChecking = true
+        lastErrorMessage = nil
+        standardUpdaterController.checkForUpdates(nil)
+    }
+
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        updateAvailable = true
+        latestVersion = item.displayVersionString
+        isChecking = false
+    }
+
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: Error) {
+        updateAvailable = false
+        latestVersion = nil
+        isChecking = false
+        lastErrorMessage = nil
+        objectWillChange.send()
+    }
+
+    func updater(
+        _ updater: SPUUpdater,
+        didFinishUpdateCycleFor updateCheck: SPUUpdateCheck,
+        error: Error?
+    ) {
+        isChecking = false
+        if let error {
+            lastErrorMessage = error.localizedDescription
+        }
+        objectWillChange.send()
+    }
+}
+
+struct SuperNotchUpdateSettingsView: View {
+    @ObservedObject private var updates = SuperNotchUpdateController.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            statusCard
+            preferencesCard
+            securityNote
+        }
+        .onAppear {
+            updates.start()
+        }
+    }
+
+    private var statusCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.14))
+                    Image(systemName: updates.updateAvailable ? "arrow.down.circle.fill" : "arrow.triangle.2.circlepath")
+                        .font(.system(size: 25, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .frame(width: 52, height: 52)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    if let latest = updates.latestVersion, updates.updateAvailable {
+                        Text("SuperNotch \(latest) is available")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Sparkle will download, verify, install, and relaunch SuperNotch.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("SuperNotch \(updates.currentVersion)")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Build \(updates.currentBuild) · Secure OTA updates")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                Button(updates.isChecking ? "Checking…" : "Check") {
+                    updates.checkForUpdates()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(updates.isChecking || !updates.canCheckForUpdates)
+            }
+
+            if let error = updates.lastErrorMessage, !error.isEmpty {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.primary.opacity(0.045))
+        )
+    }
+
+    private var preferencesCard: some View {
+        VStack(spacing: 0) {
+            settingsRow(title: "Automatically check for updates", subtitle: "Check the official SuperNotch update feed in the background.") {
+                Toggle("", isOn: Binding(
+                    get: { updates.automaticallyChecksForUpdates },
+                    set: { updates.automaticallyChecksForUpdates = $0 }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+            }
+
+            Divider().padding(.leading, 16)
+
+            settingsRow(title: "Automatically download updates", subtitle: "Download verified updates so Install & Relaunch is ready faster.") {
+                Toggle("", isOn: Binding(
+                    get: { updates.automaticallyDownloadsUpdates },
+                    set: { updates.automaticallyDownloadsUpdates = $0 }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .disabled(!updates.allowsAutomaticUpdates)
+            }
+
+            if let checked = updates.lastUpdateCheckDate {
+                Divider().padding(.leading, 16)
+                HStack {
+                    Text("Last checked")
+                    Spacer()
+                    Text(checked, style: .relative)
+                        .foregroundStyle(.secondary)
+                }
+                .font(.system(size: 12))
+                .padding(16)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.primary.opacity(0.045))
+        )
+    }
+
+    private var securityNote: some View {
+        Label(
+            "Updates are delivered over HTTPS and verified with SuperNotch's Ed25519 update key before installation.",
+            systemImage: "checkmark.shield.fill"
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    private func settingsRow<Accessory: View>(
+        title: String,
+        subtitle: String,
+        @ViewBuilder accessory: () -> Accessory
+    ) -> some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 20)
+            accessory()
+        }
+        .padding(16)
     }
 }
