@@ -1,0 +1,137 @@
+name: One-shot menu command center patch
+
+on:
+  push:
+    branches:
+      - ui/menu-command-center
+    paths:
+      - '.github/workflows/menu-command-center-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-menu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ui/menu-command-center
+          fetch-depth: 0
+
+      - name: Patch AppDelegate menu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('SuperNotch/AppDelegate.swift')
+          text = path.read_text(encoding='utf-8')
+
+          old_clear = '''        clear.target = self
+          menu.addItem(clear)
+
+          menu.addItem(.separator())
+          '''
+          new_clear = '''        clear.target = self
+          menu.addItem(clear)
+
+          let commandCenter = NSMenuItem(
+              title: "Command Center",
+              action: #selector(openCommandCenterAction),
+              keyEquivalent: ""
+          )
+          commandCenter.target = self
+          menu.addItem(commandCenter)
+
+          menu.addItem(.separator())
+          '''
+
+          old_pocket_settings = '''        let pocketbookSettings = NSMenuItem(
+              title: "Settings…",
+              action: #selector(openSettings),
+              keyEquivalent: ""
+          )
+          pocketbookSettings.target = self
+          menu.addItem(pocketbookSettings)
+
+          '''
+
+          old_bottom = '''        terminalShortcut.target = self
+          menu.addItem(terminalShortcut)
+          terminalShortcutItem = terminalShortcut
+
+          menu.addItem(.separator())
+
+          let quit = NSMenuItem(
+          '''
+          new_bottom = '''        terminalShortcut.target = self
+          menu.addItem(terminalShortcut)
+          terminalShortcutItem = terminalShortcut
+
+          menu.addItem(.separator())
+
+          let settings = NSMenuItem(
+              title: "Settings…",
+              action: #selector(openSettings),
+              keyEquivalent: ""
+          )
+          settings.target = self
+          menu.addItem(settings)
+
+          menu.addItem(.separator())
+
+          let quit = NSMenuItem(
+          '''
+
+          old_actions = '''    @objc private func openSettings() {
+              terminal.hide()
+              pocketbook.showSettings(section: .general)
+          }
+
+          @objc private func configurePocketbookShortcut() {
+          '''
+          new_actions = '''    @objc private func openCommandCenterAction() {
+              terminal.hide()
+              pocketbook.showSettings(section: .commandCenter)
+          }
+
+          @objc private func openSettings() {
+              terminal.hide()
+              pocketbook.showSettings(section: .general)
+          }
+
+          @objc private func configurePocketbookShortcut() {
+          '''
+
+          replacements = [
+              (old_clear, new_clear, 'command center menu entry'),
+              (old_pocket_settings, '', 'remove Pocketbook-local Settings'),
+              (old_bottom, new_bottom, 'move Settings before Quit'),
+              (old_actions, new_actions, 'command center action'),
+          ]
+
+          for old, new, label in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, found {count}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          git diff --check
+          git diff -- SuperNotch/AppDelegate.swift
+
+      - name: Commit final patch and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/menu-command-center-once.yml
+          git add SuperNotch/AppDelegate.swift
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "ui: expose Command Center and move Settings"
+          git push origin HEAD:ui/menu-command-center
