@@ -168,12 +168,21 @@ final class NotchCommandCenterFeature {
     private let surfaceSignature: OSType = 0x4E534C41 // NSLA
     private let model = NotchCommandCenterModel()
 
+    private static let hoverDelay: TimeInterval = 0.12
+    private static let hoverSidePadding: CGFloat = 18
+    private static let hoverBelowPadding: CGFloat = 12
+    private static let hoverReopenCooldown: TimeInterval = 0.45
+
     private var panel: NotchCommandCenterPanel?
     private var started = false
     private var requestedVisible = false
     private var pendingDismissal: DispatchWorkItem?
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
+    private var hoverLocalEventMonitor: Any?
+    private var hoverGlobalEventMonitor: Any?
+    private var hoverOpenTask: DispatchWorkItem?
+    private var hoverSuppressedUntil: TimeInterval = 0
 
     var isVisible: Bool { requestedVisible && panel?.isVisible == true }
 
@@ -195,15 +204,19 @@ final class NotchCommandCenterFeature {
         }
 
         started = true
-        NSLog("[SuperNotch] Command Center notch surface ready")
+        installHoverMonitors()
+        NSLog("[SuperNotch] Command Center notch surface ready with hover activation")
     }
 
     func stop() {
         requestedVisible = false
         pendingDismissal?.cancel()
         pendingDismissal = nil
+        hoverOpenTask?.cancel()
+        hoverOpenTask = nil
         model.presented = false
         removeEventMonitors()
+        removeHoverMonitors()
         panel?.orderOut(nil)
         panel = nil
 
@@ -230,6 +243,8 @@ final class NotchCommandCenterFeature {
             return
         }
 
+        hoverOpenTask?.cancel()
+        hoverOpenTask = nil
         pendingDismissal?.cancel()
         pendingDismissal = nil
         requestedVisible = true
@@ -254,7 +269,8 @@ final class NotchCommandCenterFeature {
         }
 
         installEventMonitors()
-        NSApp.activate(ignoringOtherApps: true)
+        // The panel is non-activating on purpose. Hovering the physical notch must
+        // never steal focus from Terminal, Xcode, a browser, or another foreground app.
         panel?.ignoresMouseEvents = false
         panel?.makeKeyAndOrderFront(nil)
         panel?.contentView?.layoutSubtreeIfNeeded()
@@ -267,6 +283,10 @@ final class NotchCommandCenterFeature {
     }
 
     func hide() {
+        hoverOpenTask?.cancel()
+        hoverOpenTask = nil
+        hoverSuppressedUntil = ProcessInfo.processInfo.systemUptime + Self.hoverReopenCooldown
+
         guard requestedVisible, let panel else {
             removeEventMonitors()
             return
@@ -290,6 +310,107 @@ final class NotchCommandCenterFeature {
         let delay = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0.12 : 0.26
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
+
+    // MARK: Hover activation
+
+    private func installHoverMonitors() {
+        removeHoverMonitors()
+
+        let movementMask: NSEvent.EventTypeMask = [
+            .mouseMoved,
+            .leftMouseDragged,
+            .rightMouseDragged,
+            .otherMouseDragged,
+        ]
+
+        hoverLocalEventMonitor = NSEvent.addLocalMonitorForEvents(matching: movementMask) { [weak self] event in
+            self?.handlePointerMoved(to: NSEvent.mouseLocation)
+            return event
+        }
+
+        hoverGlobalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: movementMask) { [weak self] _ in
+            Task { @MainActor in
+                self?.handlePointerMoved(to: NSEvent.mouseLocation)
+            }
+        }
+    }
+
+    private func removeHoverMonitors() {
+        hoverOpenTask?.cancel()
+        hoverOpenTask = nil
+
+        if let hoverLocalEventMonitor {
+            NSEvent.removeMonitor(hoverLocalEventMonitor)
+            self.hoverLocalEventMonitor = nil
+        }
+        if let hoverGlobalEventMonitor {
+            NSEvent.removeMonitor(hoverGlobalEventMonitor)
+            self.hoverGlobalEventMonitor = nil
+        }
+    }
+
+    private func handlePointerMoved(to location: NSPoint) {
+        guard started, !requestedVisible else { return }
+
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now >= hoverSuppressedUntil else {
+            hoverOpenTask?.cancel()
+            hoverOpenTask = nil
+            return
+        }
+
+        guard !anotherPrimarySurfaceIsVisible(),
+              isInsideNotchHoverRegion(location) else {
+            hoverOpenTask?.cancel()
+            hoverOpenTask = nil
+            return
+        }
+
+        guard hoverOpenTask == nil else { return }
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self,
+                  !self.requestedVisible,
+                  !self.anotherPrimarySurfaceIsVisible(),
+                  self.isInsideNotchHoverRegion(NSEvent.mouseLocation) else {
+                self?.hoverOpenTask = nil
+                return
+            }
+
+            self.hoverOpenTask = nil
+            self.show()
+        }
+        hoverOpenTask = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.hoverDelay, execute: work)
+    }
+
+    private func isInsideNotchHoverRegion(_ location: NSPoint) -> Bool {
+        guard let screen = NSScreen.screens.first(where: { NotchGeometry.measure($0) != nil }),
+              let geometry = NotchGeometry.measure(screen) else {
+            return false
+        }
+
+        let region = NSRect(
+            x: screen.frame.midX - geometry.hardwareWidth / 2 - Self.hoverSidePadding,
+            y: screen.frame.maxY - geometry.hardwareHeight - Self.hoverBelowPadding,
+            width: geometry.hardwareWidth + 2 * Self.hoverSidePadding,
+            height: geometry.hardwareHeight + Self.hoverBelowPadding
+        )
+        return region.contains(location)
+    }
+
+    private func anotherPrimarySurfaceIsVisible() -> Bool {
+        let terminalLevel = NSWindow.Level.mainMenu.rawValue + 1
+        let pocketbookLevel = NSWindow.Level.mainMenu.rawValue + 2
+
+        return NSApp.windows.contains { window in
+            guard window.isVisible, window.canBecomeKey else { return false }
+            let level = window.level.rawValue
+            return level == terminalLevel || level == pocketbookLevel
+        }
+    }
+
+    // MARK: Dismissal
 
     private func installEventMonitors() {
         removeEventMonitors()
