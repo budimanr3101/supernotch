@@ -1,0 +1,49 @@
+name: Trigger Sparkle OTA After Release
+
+on:
+  workflow_run:
+    workflows:
+      - macOS Release
+    types:
+      - completed
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-ota:
+    name: Dispatch Sparkle feed build
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Resolve release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < RELEASE_VERSION)"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid RELEASE_VERSION: $VERSION"
+            exit 1
+          fi
+          echo "TAG=v$VERSION" >> "$GITHUB_ENV"
+
+      - name: Dispatch Sparkle OTA workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run sparkle-ota.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f tag="$TAG"
+          echo "Dispatched Sparkle OTA metadata build for $TAG"
