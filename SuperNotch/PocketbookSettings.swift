@@ -148,7 +148,7 @@ private struct SuperNotchSettingsView: View {
         case .dropZone: return "Developer Drop Zone preferences live here instead of crowding the menu bar."
         case .pocketbook: return "Choose books and configure the Pocketbook shortcut."
         case .terminal: return "Native terminal preferences and shortcut."
-        case .updates: return "Keep SuperNotch current from the official GitHub releases."
+        case .updates: return "Secure over-the-air updates with download, install, and relaunch."
         case .about: return "Version and project information."
         }
     }
@@ -188,26 +188,7 @@ private struct SuperNotchSettingsView: View {
                 }
             }
         case .updates:
-            card("Software Update") {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Current version")
-                            Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button("Check for Updates…") {
-                            SuperNotchUpdateController.shared.checkForUpdates()
-                        }
-                    }
-                    Divider()
-                    Text("Updates are checked against official SuperNotch GitHub Releases.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            SuperNotchUpdateSettingsView()
         case .about:
             card("SuperNotch") {
                 VStack(alignment: .leading, spacing: 6) {
