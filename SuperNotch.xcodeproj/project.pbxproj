@@ -28,7 +28,9 @@
 		A10000000000000000000015 /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* UpdateController.swift */; };
 		A10000000000000000000016 /* FeatureRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* FeatureRegistry.swift */; };
 		A10000000000000000000017 /* DeveloperCommandCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* DeveloperCommandCenter.swift */; };
+		A10000000000000000000018 /* UpdateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* UpdateSettingsView.swift */; };
 		A20000000000000000000001 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = J20000000000000000000001 /* SwiftTerm */; };
+		A20000000000000000000002 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = J20000000000000000000002 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -55,6 +57,7 @@
 		B10000000000000000000015 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
 		B10000000000000000000016 /* FeatureRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureRegistry.swift; sourceTree = "<group>"; };
 		B10000000000000000000017 /* DeveloperCommandCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperCommandCenter.swift; sourceTree = "<group>"; };
+		B10000000000000000000018 /* UpdateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,6 +66,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A20000000000000000000001 /* SwiftTerm in Frameworks */,
+				A20000000000000000000002 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -84,6 +88,7 @@
 				B10000000000000000000002 /* AppDelegate.swift */,
 				B10000000000000000000013 /* NotchTerminalNative.swift */,
 				B10000000000000000000015 /* UpdateController.swift */,
+				B10000000000000000000018 /* UpdateSettingsView.swift */,
 				B10000000000000000000016 /* FeatureRegistry.swift */,
 				B10000000000000000000017 /* DeveloperCommandCenter.swift */,
 				B10000000000000000000003 /* ShelfCoordinator.swift */,
@@ -131,6 +136,7 @@
 			);
 			packageProductDependencies = (
 				J20000000000000000000001 /* SwiftTerm */,
+				J20000000000000000000002 /* Sparkle */,
 			);
 			name = SuperNotch;
 			productName = SuperNotch;
@@ -163,6 +169,7 @@
 			mainGroup = D10000000000000000000001;
 			packageReferences = (
 				K20000000000000000000001 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+				K20000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			productRefGroup = D10000000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -193,6 +200,7 @@
 				A10000000000000000000002 /* AppDelegate.swift in Sources */,
 				A10000000000000000000013 /* NotchTerminalNative.swift in Sources */,
 				A10000000000000000000015 /* UpdateController.swift in Sources */,
+				A10000000000000000000018 /* UpdateSettingsView.swift in Sources */,
 				A10000000000000000000016 /* FeatureRegistry.swift in Sources */,
 				A10000000000000000000017 /* DeveloperCommandCenter.swift in Sources */,
 				A10000000000000000000003 /* ShelfCoordinator.swift in Sources */,
@@ -337,6 +345,14 @@
 				version = 1.18.0;
 			};
 		};
+		K20000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -344,6 +360,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = K20000000000000000000001 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
 			productName = SwiftTerm;
+		};
+		J20000000000000000000002 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = K20000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
