@@ -30,81 +30,16 @@ jobs:
           path = Path('SuperNotch/AppDelegate.swift')
           text = path.read_text(encoding='utf-8')
 
-          old_clear = '''        clear.target = self
-          menu.addItem(clear)
+          old_clear = "        clear.target = self\n        menu.addItem(clear)\n\n        menu.addItem(.separator())"
+          new_clear = "        clear.target = self\n        menu.addItem(clear)\n\n        let commandCenter = NSMenuItem(\n            title: \"Command Center\",\n            action: #selector(openCommandCenterAction),\n            keyEquivalent: \"\"\n        )\n        commandCenter.target = self\n        menu.addItem(commandCenter)\n\n        menu.addItem(.separator())"
 
-          menu.addItem(.separator())
-          '''
-          new_clear = '''        clear.target = self
-          menu.addItem(clear)
+          old_pocket_settings = "        let pocketbookSettings = NSMenuItem(\n            title: \"Settings…\",\n            action: #selector(openSettings),\n            keyEquivalent: \"\"\n        )\n        pocketbookSettings.target = self\n        menu.addItem(pocketbookSettings)\n\n"
 
-          let commandCenter = NSMenuItem(
-              title: "Command Center",
-              action: #selector(openCommandCenterAction),
-              keyEquivalent: ""
-          )
-          commandCenter.target = self
-          menu.addItem(commandCenter)
+          old_bottom = "        terminalShortcut.target = self\n        menu.addItem(terminalShortcut)\n        terminalShortcutItem = terminalShortcut\n\n        menu.addItem(.separator())\n\n        let quit = NSMenuItem("
+          new_bottom = "        terminalShortcut.target = self\n        menu.addItem(terminalShortcut)\n        terminalShortcutItem = terminalShortcut\n\n        menu.addItem(.separator())\n\n        let settings = NSMenuItem(\n            title: \"Settings…\",\n            action: #selector(openSettings),\n            keyEquivalent: \"\"\n        )\n        settings.target = self\n        menu.addItem(settings)\n\n        menu.addItem(.separator())\n\n        let quit = NSMenuItem("
 
-          menu.addItem(.separator())
-          '''
-
-          old_pocket_settings = '''        let pocketbookSettings = NSMenuItem(
-              title: "Settings…",
-              action: #selector(openSettings),
-              keyEquivalent: ""
-          )
-          pocketbookSettings.target = self
-          menu.addItem(pocketbookSettings)
-
-          '''
-
-          old_bottom = '''        terminalShortcut.target = self
-          menu.addItem(terminalShortcut)
-          terminalShortcutItem = terminalShortcut
-
-          menu.addItem(.separator())
-
-          let quit = NSMenuItem(
-          '''
-          new_bottom = '''        terminalShortcut.target = self
-          menu.addItem(terminalShortcut)
-          terminalShortcutItem = terminalShortcut
-
-          menu.addItem(.separator())
-
-          let settings = NSMenuItem(
-              title: "Settings…",
-              action: #selector(openSettings),
-              keyEquivalent: ""
-          )
-          settings.target = self
-          menu.addItem(settings)
-
-          menu.addItem(.separator())
-
-          let quit = NSMenuItem(
-          '''
-
-          old_actions = '''    @objc private func openSettings() {
-              terminal.hide()
-              pocketbook.showSettings(section: .general)
-          }
-
-          @objc private func configurePocketbookShortcut() {
-          '''
-          new_actions = '''    @objc private func openCommandCenterAction() {
-              terminal.hide()
-              pocketbook.showSettings(section: .commandCenter)
-          }
-
-          @objc private func openSettings() {
-              terminal.hide()
-              pocketbook.showSettings(section: .general)
-          }
-
-          @objc private func configurePocketbookShortcut() {
-          '''
+          old_actions = "    @objc private func openSettings() {\n        terminal.hide()\n        pocketbook.showSettings(section: .general)\n    }\n\n    @objc private func configurePocketbookShortcut() {"
+          new_actions = "    @objc private func openCommandCenterAction() {\n        terminal.hide()\n        pocketbook.showSettings(section: .commandCenter)\n    }\n\n    @objc private func openSettings() {\n        terminal.hide()\n        pocketbook.showSettings(section: .general)\n    }\n\n    @objc private func configurePocketbookShortcut() {"
 
           replacements = [
               (old_clear, new_clear, 'command center menu entry'),
