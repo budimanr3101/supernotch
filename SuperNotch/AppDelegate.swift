@@ -10,12 +10,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private let coordinator = ShelfCoordinator()
     private let pocketbook = PocketbookFeatureV3()
+    private let commandCenter = NotchCommandCenterFeature()
     private lazy var terminal = NotchTerminalFeature(
         workingDirectoryProvider: { [weak self] in
             return self?.coordinator.recentProjectURL
         },
         beforeShow: { [weak self] in
             self?.pocketbook.hide()
+            self?.commandCenter.hide()
         }
     )
 
@@ -52,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         coordinator.start()
+        commandCenter.start()
         pocketbook.start()
         terminal.start()
         updateProjectStatus(url: coordinator.recentProjectURL)
@@ -63,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         terminal.stop()
         pocketbook.stop()
+        commandCenter.stop()
         coordinator.stop()
     }
 
@@ -400,16 +404,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openPocketbookAction() {
         terminal.hide()
+        commandCenter.hide()
         pocketbook.toggle()
     }
 
     @objc private func openCommandCenterAction() {
         terminal.hide()
-        pocketbook.showSettings(section: .commandCenter)
+        pocketbook.hide()
+        commandCenter.toggle()
     }
 
     @objc private func openSettings() {
         terminal.hide()
+        commandCenter.hide()
         pocketbook.showSettings(section: .general)
     }
 
