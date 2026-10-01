@@ -1,0 +1,223 @@
+name: Sparkle OTA Feed
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing GitHub release tag to rebuild OTA metadata for, for example v0.1.3
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sparkle-ota-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish-ota:
+    name: Sign update and publish appcast
+    runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      SPARKLE_VERSION: 2.10.0
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+
+    steps:
+      - name: Resolve release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="${{ inputs.tag }}"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $TAG"
+            exit 1
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Require Sparkle signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "Missing repository secret SPARKLE_PRIVATE_KEY."
+            echo "See docs/OTA-UPDATES.md for setup instructions."
+            exit 1
+          fi
+
+      - name: Download published SuperNotch DMG
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ota"
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'SuperNotch.dmg' \
+            --dir "$RUNNER_TEMP/ota"
+          DMG_PATH="$RUNNER_TEMP/ota/SuperNotch.dmg"
+          test -s "$DMG_PATH"
+          echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
+
+      - name: Read version metadata from app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          MOUNT_POINT="$RUNNER_TEMP/ota/mount"
+          mkdir -p "$MOUNT_POINT"
+          hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$MOUNT_POINT" >/dev/null
+          trap 'hdiutil detach "$MOUNT_POINT" -force >/dev/null 2>&1 || true' EXIT
+
+          INFO="$MOUNT_POINT/SuperNotch.app/Contents/Info.plist"
+          test -f "$INFO"
+          SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO")"
+          BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO")"
+
+          if [[ "v$SHORT_VERSION" != "$TAG" ]]; then
+            echo "Release tag $TAG does not match app version v$SHORT_VERSION."
+            exit 1
+          fi
+          if [[ -z "$BUILD_VERSION" ]]; then
+            echo "CFBundleVersion is empty."
+            exit 1
+          fi
+
+          echo "SHORT_VERSION=$SHORT_VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_VERSION=$BUILD_VERSION" >> "$GITHUB_ENV"
+
+      - name: Download Sparkle signing tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE="$RUNNER_TEMP/Sparkle.zip"
+          ROOT="$RUNNER_TEMP/sparkle-tools"
+          curl --fail --location --retry 3 \
+            "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-for-Swift-Package-Manager.zip" \
+            --output "$ARCHIVE"
+          mkdir -p "$ROOT"
+          ditto -x -k "$ARCHIVE" "$ROOT"
+          SIGN_TOOL="$(find "$ROOT" -type f -name sign_update -perm +111 | head -n 1)"
+          if [[ -z "$SIGN_TOOL" ]]; then
+            echo "Sparkle sign_update tool was not found."
+            find "$ROOT" -maxdepth 4 -type f -print
+            exit 1
+          fi
+          echo "SIGN_TOOL=$SIGN_TOOL" >> "$GITHUB_ENV"
+
+      - name: Sign update archive with EdDSA
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY_FILE="$RUNNER_TEMP/sparkle-private-key"
+          printf '%s\n' "$SPARKLE_PRIVATE_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+
+          SIGN_OUTPUT="$("$SIGN_TOOL" --ed-key-file "$KEY_FILE" "$DMG_PATH")"
+          rm -f "$KEY_FILE"
+
+          SIGNATURE="$(printf '%s\n' "$SIGN_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' | head -n 1)"
+          LENGTH="$(printf '%s\n' "$SIGN_OUTPUT" | sed -n 's/.*length="\([0-9]*\)".*/\1/p' | head -n 1)"
+          if [[ -z "$SIGNATURE" || -z "$LENGTH" ]]; then
+            echo "Could not parse Sparkle signature output."
+            echo "$SIGN_OUTPUT"
+            exit 1
+          fi
+
+          echo "SPARKLE_SIGNATURE=$SIGNATURE" >> "$GITHUB_ENV"
+          echo "SPARKLE_LENGTH=$LENGTH" >> "$GITHUB_ENV"
+
+      - name: Build release notes and appcast
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BODY_FILE="$RUNNER_TEMP/ota/release-body.md"
+          NOTES_FILE="$RUNNER_TEMP/ota/release-notes.html"
+          APPCAST_FILE="$RUNNER_TEMP/ota/appcast.xml"
+
+          gh release view "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json body \
+            --jq '.body' > "$BODY_FILE"
+
+          export BODY_FILE NOTES_FILE APPCAST_FILE
+          python3 <<'PY'
+          import datetime
+          import html
+          import os
+          from pathlib import Path
+          from xml.sax.saxutils import escape
+
+          tag = os.environ['TAG']
+          short_version = os.environ['SHORT_VERSION']
+          build_version = os.environ['BUILD_VERSION']
+          signature = os.environ['SPARKLE_SIGNATURE']
+          length = os.environ['SPARKLE_LENGTH']
+          repo = os.environ['GITHUB_REPOSITORY']
+          body_path = Path(os.environ['BODY_FILE'])
+          notes_path = Path(os.environ['NOTES_FILE'])
+          appcast_path = Path(os.environ['APPCAST_FILE'])
+
+          body = body_path.read_text(encoding='utf-8').strip()
+          notes_html = f'''<!doctype html>
+          <html><head><meta charset="utf-8"><title>SuperNotch {html.escape(short_version)}</title>
+          <style>body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:760px;margin:32px auto;padding:0 20px;line-height:1.5}}pre{{white-space:pre-wrap;font:inherit}}</style>
+          </head><body><h1>SuperNotch {html.escape(short_version)}</h1><pre>{html.escape(body)}</pre></body></html>'''
+          notes_path.write_text(notes_html, encoding='utf-8')
+
+          asset_base = f'https://github.com/{repo}/releases/download/{tag}'
+          pub_date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S %z')
+          appcast = f'''<?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>SuperNotch Updates</title>
+              <link>https://github.com/{escape(repo)}/releases</link>
+              <description>Official SuperNotch stable update feed</description>
+              <language>en</language>
+              <item>
+                <title>SuperNotch {escape(short_version)}</title>
+                <pubDate>{pub_date}</pubDate>
+                <sparkle:version>{escape(build_version)}</sparkle:version>
+                <sparkle:shortVersionString>{escape(short_version)}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+                <sparkle:releaseNotesLink>{asset_base}/release-notes.html</sparkle:releaseNotesLink>
+                <enclosure url="{asset_base}/SuperNotch.dmg"
+                           sparkle:os="macos"
+                           sparkle:edSignature="{escape(signature)}"
+                           length="{escape(length)}"
+                           type="application/x-apple-diskimage" />
+              </item>
+            </channel>
+          </rss>
+          '''
+          appcast_path.write_text(appcast, encoding='utf-8')
+          PY
+
+          xmllint --noout "$APPCAST_FILE"
+          echo "APPCAST_FILE=$APPCAST_FILE" >> "$GITHUB_ENV"
+          echo "NOTES_FILE=$NOTES_FILE" >> "$GITHUB_ENV"
+
+      - name: Publish OTA metadata on GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" \
+            "$APPCAST_FILE#appcast.xml" \
+            "$NOTES_FILE#release-notes.html" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
+          echo "OTA feed published for $TAG"
+          echo "Feed: https://github.com/$GITHUB_REPOSITORY/releases/latest/download/appcast.xml"
