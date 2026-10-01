@@ -26,5 +26,13 @@
     <string>SuperNotch reads your Finder selection and current folder so Cmd+X and Cmd+V can move files through the notch shelf.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>SUFeedURL</key>
+    <string>https://github.com/budimanr3101/supernotch/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>aF0KDVSWqVix//Hji7UKns4dLcBYlZkn7ZMrrnzCEcY=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
 </dict>
 </plist>
