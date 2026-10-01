@@ -89,6 +89,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         clear.target = self
         menu.addItem(clear)
 
+        let commandCenter = NSMenuItem(
+            title: "Command Center",
+            action: #selector(openCommandCenterAction),
+            keyEquivalent: ""
+        )
+        commandCenter.target = self
+        menu.addItem(commandCenter)
+
         menu.addItem(.separator())
 
         let dropHeader = NSMenuItem(title: "Developer Drop Zone", action: nil, keyEquivalent: "")
@@ -141,14 +149,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         openPocketbook.target = self
         menu.addItem(openPocketbook)
 
-        let pocketbookSettings = NSMenuItem(
-            title: "Settings…",
-            action: #selector(openSettings),
-            keyEquivalent: ""
-        )
-        pocketbookSettings.target = self
-        menu.addItem(pocketbookSettings)
-
         let shortcutItem = NSMenuItem(
             title: "Shortcut: \(pocketbook.shortcutDescription)…",
             action: #selector(configurePocketbookShortcut),
@@ -188,6 +188,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         terminalShortcut.target = self
         menu.addItem(terminalShortcut)
         terminalShortcutItem = terminalShortcut
+
+        menu.addItem(.separator())
+
+        let settings = NSMenuItem(
+            title: "Settings…",
+            action: #selector(openSettings),
+            keyEquivalent: ""
+        )
+        settings.target = self
+        menu.addItem(settings)
 
         menu.addItem(.separator())
 
@@ -391,6 +401,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openPocketbookAction() {
         terminal.hide()
         pocketbook.toggle()
+    }
+
+    @objc private func openCommandCenterAction() {
+        terminal.hide()
+        pocketbook.showSettings(section: .commandCenter)
     }
 
     @objc private func openSettings() {
