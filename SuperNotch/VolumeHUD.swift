@@ -266,12 +266,17 @@ final class SuperNotchVolumeHUDFeature {
     var onVolumeChanged: ((Double, Bool) -> Void)?
 
     private let stateLock = NSLock()
+    private let volumeQueue = DispatchQueue(
+        label: "com.budiman.supernotch.volume-hud",
+        qos: .userInteractive
+    )
+
     private var enabled = true
     private var eventTap: CFMachPort?
     private var eventTapSource: CFRunLoopSource?
-    private var fallbackMonitor: Any?
     private var defaultsObserver: NSObjectProtocol?
     private var permissionTimer: Timer?
+    private var retryTimer: Timer?
     private var started = false
 
     func start() {
@@ -292,8 +297,11 @@ final class SuperNotchVolumeHUDFeature {
 
     func stop() {
         started = false
+
         permissionTimer?.invalidate()
         permissionTimer = nil
+        retryTimer?.invalidate()
+        retryTimer = nil
 
         if let defaultsObserver {
             NotificationCenter.default.removeObserver(defaultsObserver)
@@ -301,7 +309,6 @@ final class SuperNotchVolumeHUDFeature {
         }
 
         removeActiveTap()
-        removeFallbackMonitor()
     }
 
     private func refreshEnabledState() {
@@ -330,29 +337,37 @@ final class SuperNotchVolumeHUDFeature {
     private func configureInputHandling() {
         guard isEnabled() else {
             removeActiveTap()
-            removeFallbackMonitor()
             permissionTimer?.invalidate()
             permissionTimer = nil
+            retryTimer?.invalidate()
+            retryTimer = nil
             return
         }
 
-        if AXIsProcessTrusted() {
-            permissionTimer?.invalidate()
-            permissionTimer = nil
-            removeFallbackMonitor()
-            installActiveTap()
-        } else {
+        guard AXIsProcessTrusted() else {
+            // Fail closed: do not render a second SuperNotch HUD while macOS still
+            // owns the media key. Until suppression permission is available we
+            // leave the native volume behavior completely untouched.
             removeActiveTap()
-            installFallbackMonitor()
+            retryTimer?.invalidate()
+            retryTimer = nil
             requestAccessibilityPermissionOnce()
             startPermissionPolling()
+            NSLog("[SuperNotch] Volume HUD waiting for Accessibility permission; native macOS HUD remains authoritative")
+            return
         }
+
+        permissionTimer?.invalidate()
+        permissionTimer = nil
+        installActiveTap()
     }
 
     private func installActiveTap() {
         guard eventTap == nil else { return }
 
-        let mask = CGEventMask(1) << 14
+        // Intercept at the HID entry point, before the login-session media-key
+        // handler can draw Apple's volume bezel.
+        let mask = CGEventMask(1) << CGEventType.systemDefined.rawValue
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo else {
                 return Unmanaged.passUnretained(event)
@@ -365,23 +380,29 @@ final class SuperNotchVolumeHUDFeature {
         }
 
         guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
+            tap: .cghidEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: mask,
             callback: callback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            installFallbackMonitor()
+            // Do not fall back to a passive monitor. That was the source of the
+            // duplicate HUD: macOS handled the key and SuperNotch mirrored it.
+            NSLog("[SuperNotch] Could not create HID media-key event tap; keeping native macOS volume HUD only")
+            scheduleTapRetry()
             return
         }
 
-        eventTap = tap
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        eventTap = tap
         eventTapSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        NSLog("[SuperNotch] Volume HUD is replacing macOS media-key volume OSD")
+
+        retryTimer?.invalidate()
+        retryTimer = nil
+        NSLog("[SuperNotch] Volume HUD HID event tap active; native macOS volume OSD will be suppressed")
     }
 
     private func removeActiveTap() {
@@ -389,6 +410,7 @@ final class SuperNotchVolumeHUDFeature {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
             eventTapSource = nil
         }
+
         if let tap = eventTap {
             CGEvent.tapEnable(tap: tap, enable: false)
             eventTap = nil
@@ -402,6 +424,7 @@ final class SuperNotchVolumeHUDFeature {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
+                NSLog("[SuperNotch] Volume HUD event tap was disabled and has been re-enabled")
             }
             return Unmanaged.passUnretained(event)
         }
@@ -412,45 +435,28 @@ final class SuperNotchVolumeHUDFeature {
             return Unmanaged.passUnretained(event)
         }
 
-        if mediaEvent.isKeyDown,
-           let snapshot = SuperNotchSystemVolume.adjust(for: mediaEvent.keyCode) {
-            DispatchQueue.main.async { [weak self] in
-                self?.onVolumeChanged?(snapshot.level, snapshot.muted)
+        if mediaEvent.isKeyDown {
+            let keyCode = mediaEvent.keyCode
+
+            // The event-tap callback must return immediately. CoreAudio work and
+            // any AppleScript fallback run off the tap's run loop so macOS cannot
+            // disable the tap for taking too long.
+            volumeQueue.async { [weak self] in
+                guard let self,
+                      let snapshot = SuperNotchSystemVolume.adjust(for: keyCode) else {
+                    return
+                }
+
+                DispatchQueue.main.async { [weak self] in
+                    self?.onVolumeChanged?(snapshot.level, snapshot.muted)
+                }
             }
         }
 
-        // Swallow recognized media-key down/up events so macOS does not draw its
-        // own volume HUD. SuperNotch becomes the visual owner while it is running.
+        // Consume both the down and up halves of volume media keys. Because the
+        // event never reaches macOS's media-key handler, its native OSD cannot
+        // appear. SuperNotch applies the volume change itself above.
         return nil
-    }
-
-    private func installFallbackMonitor() {
-        guard fallbackMonitor == nil else { return }
-
-        fallbackMonitor = NSEvent.addGlobalMonitorForEvents(matching: .systemDefined) {
-            [weak self] event in
-            guard let self,
-                  self.isEnabled(),
-                  let mediaEvent = SuperNotchMediaKey.parse(event),
-                  mediaEvent.isKeyDown else {
-                return
-            }
-
-            // Without Accessibility permission we cannot suppress Apple's OSD.
-            // Read the resulting system volume a moment later so the SuperNotch
-            // HUD still reflects the real value while permission is pending.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
-                guard let snapshot = SuperNotchSystemVolume.snapshot() else { return }
-                self?.onVolumeChanged?(snapshot.level, snapshot.muted)
-            }
-        }
-    }
-
-    private func removeFallbackMonitor() {
-        if let fallbackMonitor {
-            NSEvent.removeMonitor(fallbackMonitor)
-            self.fallbackMonitor = nil
-        }
     }
 
     private func requestAccessibilityPermissionOnce() {
@@ -467,13 +473,40 @@ final class SuperNotchVolumeHUDFeature {
 
     private func startPermissionPolling() {
         guard permissionTimer == nil else { return }
-        let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
+
+        let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
             guard let self, self.started, self.isEnabled() else { return }
+
             if AXIsProcessTrusted() {
-                self.configureInputHandling()
+                self.permissionTimer?.invalidate()
+                self.permissionTimer = nil
+                self.installActiveTap()
             }
         }
+
         permissionTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func scheduleTapRetry() {
+        guard retryTimer == nil, started, isEnabled(), AXIsProcessTrusted() else { return }
+
+        let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] timer in
+            guard let self, self.started, self.isEnabled(), AXIsProcessTrusted() else {
+                timer.invalidate()
+                self?.retryTimer = nil
+                return
+            }
+
+            if self.eventTap == nil {
+                self.installActiveTap()
+            } else {
+                timer.invalidate()
+                self.retryTimer = nil
+            }
+        }
+
+        retryTimer = timer
         RunLoop.main.add(timer, forMode: .common)
     }
 }
