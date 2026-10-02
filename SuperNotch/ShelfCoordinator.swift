@@ -142,6 +142,12 @@ final class ShelfCoordinator {
         onShelfChanged?(0)
     }
 
+    func showVolumeHUD(level: Double, muted: Bool) {
+        cancelProjectPreviewRestore()
+        overlay.showVolume(level: level, muted: muted)
+        scheduleRestore(after: 1.05)
+    }
+
     func setDefaultDropOpener(id: String) {
         guard id != "custom" else {
             if resolveCustomOpener() != nil {
