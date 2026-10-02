@@ -367,7 +367,7 @@ final class SuperNotchVolumeHUDFeature {
 
         // Intercept at the HID entry point, before the login-session media-key
         // handler can draw Apple's volume bezel.
-        let mask = CGEventMask(1) << CGEventType.systemDefined.rawValue
+        let mask = CGEventMask(1) << 14 // NX_SYSDEFINED / NSEvent.systemDefined
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo else {
                 return Unmanaged.passUnretained(event)
