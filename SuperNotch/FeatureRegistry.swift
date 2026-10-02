@@ -9,6 +9,7 @@ enum SuperNotchFeatureID: String, CaseIterable, Identifiable {
     case terminal
     case systemPulse
     case quickLinks
+    case volumeHUD
 
     var id: String { rawValue }
 
@@ -20,6 +21,7 @@ enum SuperNotchFeatureID: String, CaseIterable, Identifiable {
         case .terminal: return "Native Terminal"
         case .systemPulse: return "System Pulse"
         case .quickLinks: return "Dev Quick Links"
+        case .volumeHUD: return "Volume HUD"
         }
     }
 
@@ -31,6 +33,7 @@ enum SuperNotchFeatureID: String, CaseIterable, Identifiable {
         case .terminal: return "Real Zsh terminal inside SuperNotch."
         case .systemPulse: return "CPU, memory and disk at a glance."
         case .quickLinks: return "Jump to the tools you use every day."
+        case .volumeHUD: return "Show volume changes from the physical notch and replace the macOS volume OSD when Accessibility access is granted."
         }
     }
 
@@ -42,13 +45,14 @@ enum SuperNotchFeatureID: String, CaseIterable, Identifiable {
         case .terminal: return "terminal"
         case .systemPulse: return "waveform.path.ecg"
         case .quickLinks: return "link"
+        case .volumeHUD: return "speaker.wave.2"
         }
     }
 
     var isCore: Bool {
         switch self {
         case .fileShelf, .dropZone, .pocketbook, .terminal: return true
-        case .systemPulse, .quickLinks: return false
+        case .systemPulse, .quickLinks, .volumeHUD: return false
         }
     }
 }
@@ -61,11 +65,24 @@ final class SuperNotchFeatureRegistry: ObservableObject {
 
     private let defaults = UserDefaults.standard
     private let key = "SuperNotch.enabledFeatures"
+    private let schemaKey = "SuperNotch.featureSchemaVersion"
+    private let currentSchemaVersion = 2
 
     private init() {
         let saved = defaults.stringArray(forKey: key) ?? []
-        let parsed = Set(saved.compactMap(SuperNotchFeatureID.init(rawValue:)))
-        enabled = parsed.isEmpty ? Set(SuperNotchFeatureID.allCases) : parsed
+        var parsed = Set(saved.compactMap(SuperNotchFeatureID.init(rawValue:)))
+
+        if parsed.isEmpty {
+            parsed = Set(SuperNotchFeatureID.allCases)
+        } else if defaults.integer(forKey: schemaKey) < currentSchemaVersion {
+            // New optional features default on for existing installs unless the user
+            // has already seen this feature schema and explicitly disabled them.
+            parsed.insert(.volumeHUD)
+        }
+
+        enabled = parsed
+        defaults.set(enabled.map(\.rawValue).sorted(), forKey: key)
+        defaults.set(currentSchemaVersion, forKey: schemaKey)
     }
 
     func isEnabled(_ feature: SuperNotchFeatureID) -> Bool {

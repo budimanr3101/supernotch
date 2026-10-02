@@ -29,6 +29,7 @@
 		A10000000000000000000016 /* FeatureRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* FeatureRegistry.swift */; };
 		A10000000000000000000017 /* DeveloperCommandCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000017 /* DeveloperCommandCenter.swift */; };
 		A10000000000000000000018 /* UpdateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000018 /* UpdateSettingsView.swift */; };
+		A10000000000000000000019 /* VolumeHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000019 /* VolumeHUD.swift */; };
 		A20000000000000000000001 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = J20000000000000000000001 /* SwiftTerm */; };
 		A20000000000000000000002 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = J20000000000000000000002 /* Sparkle */; };
 /* End PBXBuildFile section */
@@ -58,6 +59,7 @@
 		B10000000000000000000016 /* FeatureRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureRegistry.swift; sourceTree = "<group>"; };
 		B10000000000000000000017 /* DeveloperCommandCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperCommandCenter.swift; sourceTree = "<group>"; };
 		B10000000000000000000018 /* UpdateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateSettingsView.swift; sourceTree = "<group>"; };
+		B10000000000000000000019 /* VolumeHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeHUD.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,6 +91,7 @@
 				B10000000000000000000013 /* NotchTerminalNative.swift */,
 				B10000000000000000000015 /* UpdateController.swift */,
 				B10000000000000000000018 /* UpdateSettingsView.swift */,
+				B10000000000000000000019 /* VolumeHUD.swift */,
 				B10000000000000000000016 /* FeatureRegistry.swift */,
 				B10000000000000000000017 /* DeveloperCommandCenter.swift */,
 				B10000000000000000000003 /* ShelfCoordinator.swift */,
@@ -201,6 +204,7 @@
 				A10000000000000000000013 /* NotchTerminalNative.swift in Sources */,
 				A10000000000000000000015 /* UpdateController.swift in Sources */,
 				A10000000000000000000018 /* UpdateSettingsView.swift in Sources */,
+				A10000000000000000000019 /* VolumeHUD.swift in Sources */,
 				A10000000000000000000016 /* FeatureRegistry.swift in Sources */,
 				A10000000000000000000017 /* DeveloperCommandCenter.swift in Sources */,
 				A10000000000000000000003 /* ShelfCoordinator.swift in Sources */,

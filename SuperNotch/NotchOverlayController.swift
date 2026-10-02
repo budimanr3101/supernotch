@@ -14,6 +14,7 @@ final class NotchOverlayModel: ObservableObject {
         case dropSuccess
         case dropFailure
         case notice
+        case volume
     }
 
     @Published var state: State = .staged
@@ -26,6 +27,8 @@ final class NotchOverlayModel: ObservableObject {
     @Published var actionLabel = ""
     @Published var targetAppName = ""
     @Published var targetAppIcon: NSImage?
+    @Published var volumeLevel: CGFloat = 0
+    @Published var volumeMuted = false
 }
 
 struct NotchGeometry: Equatable {
@@ -48,6 +51,7 @@ struct NotchGeometry: Equatable {
     // miss behind the physical camera housing.
     static let dropDepth: CGFloat = 42
     static let noticeDepth: CGFloat = 31
+    static let volumeDepth: CGFloat = 29
     static let bottomSlack: CGFloat = 3
 
     var expandedWidth: CGFloat {
@@ -429,6 +433,17 @@ final class NotchOverlayController {
         model.itemLabel = title
         model.actionLabel = subtitle
         model.targetAppIcon = icon
+        revealFromHardwareNotchIfNeeded()
+    }
+
+    func showVolume(level: Double, muted: Bool) {
+        cancelTimers()
+        guard preparePanel() else { return }
+
+        resetActionMetadata()
+        model.state = .volume
+        model.volumeLevel = CGFloat(max(0, min(1, level)))
+        model.volumeMuted = muted
         revealFromHardwareNotchIfNeeded()
     }
 

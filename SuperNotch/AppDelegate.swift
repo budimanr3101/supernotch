@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let coordinator = ShelfCoordinator()
     private let pocketbook = PocketbookFeatureV3()
     private let commandCenter = NotchCommandCenterFeature()
+    private lazy var volumeHUD = SuperNotchVolumeHUDFeature()
     private lazy var terminal = NotchTerminalFeature(
         workingDirectoryProvider: { [weak self] in
             return self?.coordinator.recentProjectURL
@@ -53,7 +54,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.updateTerminalUI()
         }
 
+        volumeHUD.onVolumeChanged = { [weak self] level, muted in
+            self?.coordinator.showVolumeHUD(level: level, muted: muted)
+        }
+
         coordinator.start()
+        volumeHUD.start()
         commandCenter.start()
         pocketbook.start()
         terminal.start()
@@ -67,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         terminal.stop()
         pocketbook.stop()
         commandCenter.stop()
+        volumeHUD.stop()
         coordinator.stop()
     }
 
