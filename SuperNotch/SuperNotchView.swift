@@ -20,6 +20,8 @@ struct SuperNotchView: View {
             return NotchGeometry.dropWingWidth
         case .notice:
             return 58
+        case .volume:
+            return 66
         default:
             return NotchGeometry.wingWidth
         }
@@ -37,6 +39,8 @@ struct SuperNotchView: View {
             return NotchGeometry.dropDepth
         case .notice:
             return NotchGeometry.noticeDepth
+        case .volume:
+            return NotchGeometry.volumeDepth
         }
     }
 
@@ -189,6 +193,39 @@ struct SuperNotchView: View {
                 width: noticeFooterWidth(for: geometry),
                 height: NotchGeometry.noticeDepth
             )
+
+        case .volume:
+            HStack(spacing: 8) {
+                Image(systemName: volumeSymbol)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(model.volumeMuted ? .white.opacity(0.46) : .white.opacity(0.88))
+
+                GeometryReader { proxy in
+                    let clamped = min(max(model.volumeLevel, 0), 1)
+                    let fillWidth = max(2, proxy.size.width * clamped)
+
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(.white.opacity(0.13))
+
+                        Capsule()
+                            .fill(model.volumeMuted ? Color.white.opacity(0.30) : Color.accentColor)
+                            .frame(width: fillWidth)
+                    }
+                }
+                .frame(height: 3)
+
+                Text(model.volumeMuted ? "Muted" : "\(Int((model.volumeLevel * 100).rounded()))%")
+                    .font(.system(size: 9.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.72))
+                    .frame(minWidth: 35, alignment: .trailing)
+                    .contentTransition(.numericText())
+            }
+            .padding(.horizontal, 10)
+            .frame(
+                width: volumeFooterWidth(for: geometry),
+                height: NotchGeometry.volumeDepth
+            )
         }
     }
 
@@ -265,6 +302,23 @@ struct SuperNotchView: View {
 
     private func noticeFooterWidth(for geometry: NotchGeometry) -> CGFloat {
         geometry.hardwareWidth + 76
+    }
+
+    private func volumeFooterWidth(for geometry: NotchGeometry) -> CGFloat {
+        geometry.hardwareWidth + 96
+    }
+
+    private var volumeSymbol: String {
+        if model.volumeMuted || model.volumeLevel <= 0.001 {
+            return "speaker.slash.fill"
+        }
+        if model.volumeLevel < 0.34 {
+            return "speaker.wave.1.fill"
+        }
+        if model.volumeLevel < 0.67 {
+            return "speaker.wave.2.fill"
+        }
+        return "speaker.wave.3.fill"
     }
 
     private func progressBar(success: Bool) -> some View {
@@ -346,6 +400,12 @@ struct SuperNotchView: View {
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(.green)
                 .transition(.scale(scale: 0.7).combined(with: .opacity))
+
+        case .volume:
+            Image(systemName: volumeSymbol)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(model.volumeMuted ? .white.opacity(0.50) : .white.opacity(0.94))
+                .contentTransition(.symbolEffect(.replace))
         }
     }
 
@@ -414,6 +474,12 @@ struct SuperNotchView: View {
         case .notice:
             targetAppIcon(size: 19)
                 .transition(.scale(scale: 0.72).combined(with: .opacity))
+
+        case .volume:
+            Text(model.volumeMuted ? "MUTE" : "\(Int((model.volumeLevel * 100).rounded()))")
+                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.78))
+                .contentTransition(.numericText())
         }
     }
 
