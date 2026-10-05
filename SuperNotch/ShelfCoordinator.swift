@@ -148,6 +148,15 @@ final class ShelfCoordinator {
         scheduleRestore(after: 1.05)
     }
 
+    func showLiveTranslate(source: String, target: String, partial: Bool) {
+        cancelProjectPreviewRestore()
+        overlay.showLiveTranslate(source: source, target: target, partial: partial)
+    }
+
+    func hideTransientOverlay() {
+        restoreShelfOverlay()
+    }
+
     func setDefaultDropOpener(id: String) {
         guard id != "custom" else {
             if resolveCustomOpener() != nil {
