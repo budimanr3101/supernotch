@@ -5,6 +5,7 @@ import Translation
 
 @MainActor
 final class NotchOverlayModel: ObservableObject {
+    private static let liveTranslateShowSourceKey = "SuperNotch.LiveTranslate.showSource"
     enum State: Equatable {
         case staged
         case moving
@@ -35,6 +36,17 @@ final class NotchOverlayModel: ObservableObject {
     @Published var translationTarget = ""
     @Published var translationPartial = false
     @Published var translationConfiguration: TranslationSession.Configuration?
+    @Published var translationShowsSource: Bool = {
+        if UserDefaults.standard.object(forKey: liveTranslateShowSourceKey) == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: liveTranslateShowSourceKey)
+    }()
+
+    func setTranslationShowsSource(_ show: Bool) {
+        translationShowsSource = show
+        UserDefaults.standard.set(show, forKey: Self.liveTranslateShowSourceKey)
+    }
 
     func requestTranslation(source: String, partial: Bool) {
         translationSource = source
@@ -57,7 +69,7 @@ struct NotchGeometry: Equatable {
 
     static let wingWidth: CGFloat = 42
     static let dropWingWidth: CGFloat = 82
-    static let liveTranslateWingWidth: CGFloat = 118
+    static let liveTranslateWingWidth: CGFloat = 154
     static let topRadius: CGFloat = 8
     static let bottomRadius: CGFloat = 12
 
@@ -73,7 +85,7 @@ struct NotchGeometry: Equatable {
     static let dropDepth: CGFloat = 42
     static let noticeDepth: CGFloat = 31
     static let volumeDepth: CGFloat = 29
-    static let liveTranslateDepth: CGFloat = 112
+    static let liveTranslateDepth: CGFloat = 124
     static let bottomSlack: CGFloat = 3
 
     var expandedWidth: CGFloat {
@@ -489,6 +501,14 @@ final class NotchOverlayController {
         model.volumeLevel = CGFloat(max(0, min(1, level)))
         model.volumeMuted = muted
         revealFromHardwareNotchIfNeeded()
+    }
+
+    var liveTranslateShowsSource: Bool {
+        model.translationShowsSource
+    }
+
+    func setLiveTranslateShowsSource(_ show: Bool) {
+        model.setTranslationShowsSource(show)
     }
 
     func showLiveTranslate(source: String, target: String, partial: Bool) {
