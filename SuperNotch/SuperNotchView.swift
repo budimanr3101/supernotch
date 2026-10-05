@@ -24,7 +24,7 @@ struct SuperNotchView: View {
         case .volume:
             return 66
         case .liveTranslate:
-            return 92
+            return NotchGeometry.liveTranslateWingWidth
         default:
             return NotchGeometry.wingWidth
         }
@@ -267,16 +267,16 @@ struct SuperNotchView: View {
 
                 if !model.translationSource.isEmpty {
                     Text(model.translationSource)
-                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.55))
                         .lineLimit(2)
                         .truncationMode(.tail)
                 }
 
                 Text(model.translationTarget.isEmpty ? "Listening…" : model.translationTarget)
-                    .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.96))
-                    .lineLimit(3)
+                    .lineLimit(4)
                     .truncationMode(.tail)
             }
             .padding(.horizontal, 12)
@@ -369,7 +369,7 @@ struct SuperNotchView: View {
     }
 
     private func liveTranslateFooterWidth(for geometry: NotchGeometry) -> CGFloat {
-        geometry.hardwareWidth + 164
+        geometry.hardwareWidth + 2 * (NotchGeometry.liveTranslateWingWidth - 14)
     }
 
     private var volumeSymbol: String {
