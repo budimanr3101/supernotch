@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Translation
 
 struct SuperNotchView: View {
     @ObservedObject var model: NotchOverlayModel
@@ -119,6 +120,24 @@ struct SuperNotchView: View {
                 value: activeWingWidth
             )
             .ignoresSafeArea()
+            .translationTask(model.translationConfiguration) { session in
+                guard model.state == .liveTranslate else { return }
+
+                let source = model.translationSource
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !source.isEmpty else { return }
+
+                do {
+                    let response = try await session.translate(source)
+                    guard model.translationSource == source else { return }
+                    model.translationTarget = response.targetText
+                } catch {
+                    guard model.translationSource == source else { return }
+                    model.translationTarget = "Translation unavailable: \(error.localizedDescription)"
+                    model.translationPartial = false
+                    NSLog("[SuperNotch] Translation error: %@", error.localizedDescription)
+                }
+            }
         }
     }
 
