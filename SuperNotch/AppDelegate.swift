@@ -31,7 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var clearProjectItem: NSMenuItem?
     private var pocketbookShortcutItem: NSMenuItem?
     private var terminalShortcutItem: NSMenuItem?
+    private var liveTranslateEnabledItem: NSMenuItem?
     private var liveTranslateMenuItem: NSMenuItem?
+    private var liveTranslateShortcutItem: NSMenuItem?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -66,12 +68,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         liveTranslate.onStateChanged = { [weak self] _ in
             self?.updateLiveTranslateUI()
         }
+        liveTranslate.onShortcutChanged = { [weak self] in
+            self?.updateLiveTranslateUI()
+        }
 
         coordinator.start()
         volumeHUD.start()
         commandCenter.start()
         pocketbook.start()
         terminal.start()
+        liveTranslate.installShortcut()
         updateProjectStatus(url: coordinator.recentProjectURL)
         updateDropOpenerUI()
         updatePocketbookUI()
@@ -80,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         liveTranslate.stop()
+        liveTranslate.uninstallShortcut()
         terminal.stop()
         pocketbook.stop()
         commandCenter.stop()
@@ -185,6 +192,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         translateHeader.isEnabled = false
         menu.addItem(translateHeader)
 
+        let liveTranslateEnabled = NSMenuItem(
+            title: "Enable Live Translate",
+            action: #selector(toggleLiveTranslateFeatureAction),
+            keyEquivalent: ""
+        )
+        liveTranslateEnabled.target = self
+        menu.addItem(liveTranslateEnabled)
+        liveTranslateEnabledItem = liveTranslateEnabled
+
         let liveTranslateItem = NSMenuItem(
             title: "Start Live Translate",
             action: #selector(toggleLiveTranslateAction),
@@ -193,6 +209,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         liveTranslateItem.target = self
         menu.addItem(liveTranslateItem)
         liveTranslateMenuItem = liveTranslateItem
+
+        let liveTranslateShortcut = NSMenuItem(
+            title: "Shortcut: \(liveTranslate.shortcutDescription)…",
+            action: #selector(configureLiveTranslateShortcut),
+            keyEquivalent: ""
+        )
+        liveTranslateShortcut.target = self
+        menu.addItem(liveTranslateShortcut)
+        liveTranslateShortcutItem = liveTranslateShortcut
 
         menu.addItem(.separator())
 
@@ -349,10 +374,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateLiveTranslateUI() {
+        liveTranslateEnabledItem?.state = liveTranslate.isEnabled ? .on : .off
+
         liveTranslateMenuItem?.title = liveTranslate.isRunning
             ? "Stop Live Translate"
             : "Start Live Translate"
         liveTranslateMenuItem?.state = liveTranslate.isRunning ? .on : .off
+        liveTranslateMenuItem?.isEnabled = liveTranslate.isEnabled
+
+        liveTranslateShortcutItem?.title = "Shortcut: \(liveTranslate.shortcutDescription)…"
     }
 
     @objc private func clearShelf() {
@@ -443,12 +473,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         SuperNotchUpdateController.shared.checkForUpdates()
     }
 
+    @objc private func toggleLiveTranslateFeatureAction() {
+        let enabled = !liveTranslate.isEnabled
+        liveTranslate.setFeatureEnabled(enabled)
+
+        if !enabled {
+            coordinator.hideTransientOverlay()
+        }
+
+        updateLiveTranslateUI()
+    }
+
     @objc private func toggleLiveTranslateAction() {
+        guard liveTranslate.isEnabled else {
+            NSSound.beep()
+            return
+        }
+
         liveTranslate.toggle()
         updateLiveTranslateUI()
         if !liveTranslate.isRunning {
             coordinator.hideTransientOverlay()
         }
+    }
+
+    @objc private func configureLiveTranslateShortcut() {
+        liveTranslate.showShortcutRecorder()
+        updateLiveTranslateUI()
     }
 
     @objc private func openPocketbookAction() {
