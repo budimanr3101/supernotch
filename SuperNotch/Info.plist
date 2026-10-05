@@ -24,6 +24,8 @@
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>SuperNotch reads your Finder selection and current folder so Cmd+X and Cmd+V can move files through the notch shelf.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>SuperNotch uses speech recognition to turn meeting audio into live translated subtitles.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>SUFeedURL</key>
