@@ -1,5 +1,6 @@
 import AppKit
 import CoreMedia
+import CoreGraphics
 import Foundation
 import ScreenCaptureKit
 import Speech
@@ -132,6 +133,16 @@ final class SuperNotchLiveTranslateFeature: NSObject {
     }
 
     private func startSystemAudioCapture() async throws {
+        guard CGPreflightScreenCaptureAccess() else {
+            let granted = CGRequestScreenCaptureAccess()
+            if !granted {
+                throw LiveTranslateError.screenRecordingPermission
+            }
+            // macOS applies Screen Recording permission to a running app only
+            // after it has been relaunched.
+            throw LiveTranslateError.screenRecordingRestartRequired
+        }
+
         let content = try await SCShareableContent.excludingDesktopWindows(
             false,
             onScreenWindowsOnly: true
@@ -215,11 +226,19 @@ final class SuperNotchLiveTranslateFeature: NSObject {
         }
 
         let nsError = error as NSError
+
+        NSLog(
+            "[SuperNotch] Live Translate failed: domain=%@ code=%ld message=%@",
+            nsError.domain,
+            nsError.code,
+            nsError.localizedDescription
+        )
+
         if nsError.domain == "com.apple.ScreenCaptureKit.SCStreamErrorDomain" {
-            return "SuperNotch butuh izin Screen & System Audio Recording untuk mendengar audio meeting."
+            return "System audio capture gagal (SCStream error \(nsError.code)): \(nsError.localizedDescription)"
         }
 
-        return error.localizedDescription
+        return "\(nsError.domain) (\(nsError.code)): \(nsError.localizedDescription)"
     }
 }
 
@@ -247,6 +266,8 @@ private final class LiveTranslateStreamOutput: NSObject, SCStreamOutput, SCStrea
 private enum LiveTranslateError: LocalizedError {
     case speechPermission
     case speechUnavailable
+    case screenRecordingPermission
+    case screenRecordingRestartRequired
     case noDisplay
 
     var errorDescription: String? {
@@ -255,6 +276,10 @@ private enum LiveTranslateError: LocalizedError {
             return "Izinkan Speech Recognition untuk SuperNotch di System Settings → Privacy & Security."
         case .speechUnavailable:
             return "Speech Recognition sedang tidak tersedia."
+        case .screenRecordingPermission:
+            return "Izinkan SuperNotch di System Settings → Privacy & Security → Screen & System Audio Recording."
+        case .screenRecordingRestartRequired:
+            return "Permission sudah diberikan. Quit SuperNotch lalu buka lagi agar macOS menerapkan izin Screen & System Audio Recording."
         case .noDisplay:
             return "SuperNotch tidak menemukan display yang bisa dipakai untuk menangkap audio meeting."
         }
