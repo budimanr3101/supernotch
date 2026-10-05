@@ -57,6 +57,7 @@ struct NotchGeometry: Equatable {
 
     static let wingWidth: CGFloat = 42
     static let dropWingWidth: CGFloat = 82
+    static let liveTranslateWingWidth: CGFloat = 118
     static let topRadius: CGFloat = 8
     static let bottomRadius: CGFloat = 12
 
@@ -72,11 +73,11 @@ struct NotchGeometry: Equatable {
     static let dropDepth: CGFloat = 42
     static let noticeDepth: CGFloat = 31
     static let volumeDepth: CGFloat = 29
-    static let liveTranslateDepth: CGFloat = 92
+    static let liveTranslateDepth: CGFloat = 112
     static let bottomSlack: CGFloat = 3
 
     var expandedWidth: CGFloat {
-        hardwareWidth + 2 * (Self.dropWingWidth + Self.topRadius)
+        hardwareWidth + 2 * (max(Self.dropWingWidth, Self.liveTranslateWingWidth) + Self.topRadius)
     }
 
     /// Fixed maximum envelope. Neither file-move nor Drop Zone animations resize
