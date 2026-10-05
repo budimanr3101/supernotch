@@ -63,7 +63,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         liveTranslate.onCaption = { [weak self] source, target, partial in
-            self?.coordinator.showLiveTranslate(source: source, target: target, partial: partial)
+            guard let self else { return }
+
+            // Live Translate keeps listening in the background, but the physical
+            // notch has a single visual owner. Never let captions stack over
+            // Terminal, Pocketbook, or Command Center.
+            guard !self.terminal.isVisible,
+                  !self.pocketbook.isVisible,
+                  !self.commandCenter.isVisible else {
+                return
+            }
+
+            self.coordinator.showLiveTranslate(
+                source: source,
+                target: target,
+                partial: partial
+            )
         }
         liveTranslate.onStateChanged = { [weak self] _ in
             self?.updateLiveTranslateUI()
