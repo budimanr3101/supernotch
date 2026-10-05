@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import SwiftUI
+import Translation
 
 @MainActor
 final class NotchOverlayModel: ObservableObject {
@@ -33,6 +34,21 @@ final class NotchOverlayModel: ObservableObject {
     @Published var translationSource = ""
     @Published var translationTarget = ""
     @Published var translationPartial = false
+    @Published var translationConfiguration: TranslationSession.Configuration?
+
+    func requestTranslation(source: String, partial: Bool) {
+        translationSource = source
+        translationTarget = "Translating…"
+        translationPartial = partial
+
+        var configuration = translationConfiguration
+            ?? TranslationSession.Configuration(
+                source: Locale.Language(identifier: "en"),
+                target: Locale.Language(identifier: "id")
+            )
+        configuration.invalidate()
+        translationConfiguration = configuration
+    }
 }
 
 struct NotchGeometry: Equatable {
@@ -458,9 +474,13 @@ final class NotchOverlayController {
 
         resetActionMetadata()
         model.state = .liveTranslate
-        model.translationSource = source
-        model.translationTarget = target
-        model.translationPartial = partial
+        if !source.isEmpty && target.isEmpty {
+            model.requestTranslation(source: source, partial: partial)
+        } else {
+            model.translationSource = source
+            model.translationTarget = target
+            model.translationPartial = partial
+        }
         revealFromHardwareNotchIfNeeded()
     }
 
