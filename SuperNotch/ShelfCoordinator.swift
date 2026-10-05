@@ -69,6 +69,7 @@ final class ShelfCoordinator {
     var stagedCount: Int { store.count }
     var recentProjectURL: URL? { validatedRecentProject() }
     var defaultDropOpenerName: String { resolveDefaultOpener().displayName }
+    var liveTranslateShowsSource: Bool { overlay.liveTranslateShowsSource }
 
     var dropOpenerMenuOptions: [DropOpenerMenuOption] {
         let selectedID = resolveDefaultOpener().id
@@ -151,6 +152,10 @@ final class ShelfCoordinator {
     func showLiveTranslate(source: String, target: String, partial: Bool) {
         cancelProjectPreviewRestore()
         overlay.showLiveTranslate(source: source, target: target, partial: partial)
+    }
+
+    func setLiveTranslateShowsSource(_ show: Bool) {
+        overlay.setLiveTranslateShowsSource(show)
     }
 
     func hideTransientOverlay() {
