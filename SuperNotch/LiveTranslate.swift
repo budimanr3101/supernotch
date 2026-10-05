@@ -188,11 +188,6 @@ final class SuperNotchLiveTranslateFeature: NSObject {
     }
 
     private func handleRecognizedText(_ text: String, isFinal: Bool) {
-        onCaption?(text, "Translating…", true)
-
-        guard text != lastRequestedText else { return }
-        lastRequestedText = text
-
         onCaption?(text, "", !isFinal)
     }
 
