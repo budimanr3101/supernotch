@@ -3,7 +3,6 @@ import CoreMedia
 import Foundation
 import ScreenCaptureKit
 import Speech
-import Translation
 
 @MainActor
 final class SuperNotchLiveTranslateFeature: NSObject {
@@ -28,8 +27,6 @@ final class SuperNotchLiveTranslateFeature: NSObject {
     private var streamOutput: LiveTranslateStreamOutput?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private var translationTask: Task<Void, Never>?
-    private var lastRequestedText = ""
     private var state: State = .idle {
         didSet { onStateChanged?(state) }
     }
@@ -196,45 +193,10 @@ final class SuperNotchLiveTranslateFeature: NSObject {
         guard text != lastRequestedText else { return }
         lastRequestedText = text
 
-        translationTask?.cancel()
-        let delay: UInt64 = isFinal ? 60_000_000 : 450_000_000
-
-        translationTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: delay)
-            guard !Task.isCancelled, let self else { return }
-            await self.translate(text, isFinal: isFinal)
-        }
-    }
-
-    private func translate(_ text: String, isFinal: Bool) async {
-        do {
-            let source = Locale.Language(identifier: "en")
-            let target = Locale.Language(identifier: "id")
-            let session = TranslationSession(
-                installedSource: source,
-                target: target,
-                preferredStrategy: .lowLatency
-            )
-            let response = try await session.translate(text)
-
-            guard !Task.isCancelled else { return }
-            onCaption?(text, response.targetText, !isFinal)
-        } catch {
-            guard !Task.isCancelled else { return }
-            NSLog("[SuperNotch] Translation error: %@", error.localizedDescription)
-            onCaption?(
-                text,
-                "Translation language pack belum siap. Buka app Translate sekali untuk memasang English ↔ Indonesian.",
-                false
-            )
-        }
+        onCaption?(text, "", !isFinal)
     }
 
     private func stopInternals() {
-        translationTask?.cancel()
-        translationTask = nil
-        lastRequestedText = ""
-
         recognitionTask?.cancel()
         recognitionTask = nil
 
