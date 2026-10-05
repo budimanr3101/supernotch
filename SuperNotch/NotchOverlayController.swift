@@ -5,7 +5,7 @@ import Translation
 
 @MainActor
 final class NotchOverlayModel: ObservableObject {
-    private static let liveTranslateShowSourceKey = "SuperNotch.LiveTranslate.showSource"
+    private static let NotchOverlayModel.liveTranslateShowSourceKey = "SuperNotch.LiveTranslate.showSource"
     enum State: Equatable {
         case staged
         case moving
@@ -37,15 +37,15 @@ final class NotchOverlayModel: ObservableObject {
     @Published var translationPartial = false
     @Published var translationConfiguration: TranslationSession.Configuration?
     @Published var translationShowsSource: Bool = {
-        if UserDefaults.standard.object(forKey: liveTranslateShowSourceKey) == nil {
+        if UserDefaults.standard.object(forKey: NotchOverlayModel.liveTranslateShowSourceKey) == nil {
             return true
         }
-        return UserDefaults.standard.bool(forKey: liveTranslateShowSourceKey)
+        return UserDefaults.standard.bool(forKey: NotchOverlayModel.liveTranslateShowSourceKey)
     }()
 
     func setTranslationShowsSource(_ show: Bool) {
         translationShowsSource = show
-        UserDefaults.standard.set(show, forKey: Self.liveTranslateShowSourceKey)
+        UserDefaults.standard.set(show, forKey: NotchOverlayModel.liveTranslateShowSourceKey)
     }
 
     func requestTranslation(source: String, partial: Bool) {
