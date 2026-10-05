@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var liveTranslateEnabledItem: NSMenuItem?
     private var liveTranslateMenuItem: NSMenuItem?
     private var liveTranslateShortcutItem: NSMenuItem?
+    private var liveTranslateSourceItem: NSMenuItem?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -234,6 +235,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(liveTranslateShortcut)
         liveTranslateShortcutItem = liveTranslateShortcut
 
+        let liveTranslateSource = NSMenuItem(
+            title: "Show English Source",
+            action: #selector(toggleLiveTranslateSourceAction),
+            keyEquivalent: ""
+        )
+        liveTranslateSource.target = self
+        menu.addItem(liveTranslateSource)
+        liveTranslateSourceItem = liveTranslateSource
+
         menu.addItem(.separator())
 
         let terminalHeader = NSMenuItem(title: "Notch Terminal", action: nil, keyEquivalent: "")
@@ -398,6 +408,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         liveTranslateMenuItem?.isEnabled = liveTranslate.isEnabled
 
         liveTranslateShortcutItem?.title = "Shortcut: \(liveTranslate.shortcutDescription)…"
+        liveTranslateSourceItem?.state = coordinator.liveTranslateShowsSource ? .on : .off
+        liveTranslateSourceItem?.isEnabled = liveTranslate.isEnabled
     }
 
     @objc private func clearShelf() {
@@ -514,6 +526,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func configureLiveTranslateShortcut() {
         liveTranslate.showShortcutRecorder()
+        updateLiveTranslateUI()
+    }
+
+    @objc private func toggleLiveTranslateSourceAction() {
+        coordinator.setLiveTranslateShowsSource(!coordinator.liveTranslateShowsSource)
         updateLiveTranslateUI()
     }
 
