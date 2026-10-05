@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let pocketbook = PocketbookFeatureV3()
     private let commandCenter = NotchCommandCenterFeature()
     private lazy var volumeHUD = SuperNotchVolumeHUDFeature()
+    private lazy var liveTranslate = SuperNotchLiveTranslateFeature()
     private lazy var terminal = NotchTerminalFeature(
         workingDirectoryProvider: { [weak self] in
             return self?.coordinator.recentProjectURL
@@ -30,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var clearProjectItem: NSMenuItem?
     private var pocketbookShortcutItem: NSMenuItem?
     private var terminalShortcutItem: NSMenuItem?
+    private var liveTranslateMenuItem: NSMenuItem?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -58,6 +60,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.coordinator.showVolumeHUD(level: level, muted: muted)
         }
 
+        liveTranslate.onCaption = { [weak self] source, target, partial in
+            self?.coordinator.showLiveTranslate(source: source, target: target, partial: partial)
+        }
+        liveTranslate.onStateChanged = { [weak self] _ in
+            self?.updateLiveTranslateUI()
+        }
+
         coordinator.start()
         volumeHUD.start()
         commandCenter.start()
@@ -70,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        liveTranslate.stop()
         terminal.stop()
         pocketbook.stop()
         commandCenter.stop()
@@ -171,6 +181,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let translateHeader = NSMenuItem(title: "Live Translate", action: nil, keyEquivalent: "")
+        translateHeader.isEnabled = false
+        menu.addItem(translateHeader)
+
+        let liveTranslateItem = NSMenuItem(
+            title: "Start Live Translate",
+            action: #selector(toggleLiveTranslateAction),
+            keyEquivalent: ""
+        )
+        liveTranslateItem.target = self
+        menu.addItem(liveTranslateItem)
+        liveTranslateMenuItem = liveTranslateItem
+
+        menu.addItem(.separator())
+
         let terminalHeader = NSMenuItem(title: "Notch Terminal", action: nil, keyEquivalent: "")
         terminalHeader.isEnabled = false
         menu.addItem(terminalHeader)
@@ -227,6 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateDropOpenerUI()
         updatePocketbookUI()
         updateTerminalUI()
+        updateLiveTranslateUI()
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -235,6 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateDropOpenerUI()
         updatePocketbookUI()
         updateTerminalUI()
+        updateLiveTranslateUI()
     }
 
     private func updateShelfStatus(count: Int) {
@@ -319,6 +346,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateTerminalUI() {
         terminalShortcutItem?.title = "Shortcut: \(terminal.shortcutDescription)…"
+    }
+
+    private func updateLiveTranslateUI() {
+        liveTranslateMenuItem?.title = liveTranslate.isRunning
+            ? "Stop Live Translate"
+            : "Start Live Translate"
+        liveTranslateMenuItem?.state = liveTranslate.isRunning ? .on : .off
     }
 
     @objc private func clearShelf() {
@@ -407,6 +441,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func checkForUpdates() {
         SuperNotchUpdateController.shared.checkForUpdates()
+    }
+
+    @objc private func toggleLiveTranslateAction() {
+        liveTranslate.toggle()
+        updateLiveTranslateUI()
+        if !liveTranslate.isRunning {
+            coordinator.hideTransientOverlay()
+        }
     }
 
     @objc private func openPocketbookAction() {

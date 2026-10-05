@@ -15,6 +15,7 @@ final class NotchOverlayModel: ObservableObject {
         case dropFailure
         case notice
         case volume
+        case liveTranslate
     }
 
     @Published var state: State = .staged
@@ -29,6 +30,9 @@ final class NotchOverlayModel: ObservableObject {
     @Published var targetAppIcon: NSImage?
     @Published var volumeLevel: CGFloat = 0
     @Published var volumeMuted = false
+    @Published var translationSource = ""
+    @Published var translationTarget = ""
+    @Published var translationPartial = false
 }
 
 struct NotchGeometry: Equatable {
@@ -52,6 +56,7 @@ struct NotchGeometry: Equatable {
     static let dropDepth: CGFloat = 42
     static let noticeDepth: CGFloat = 31
     static let volumeDepth: CGFloat = 29
+    static let liveTranslateDepth: CGFloat = 92
     static let bottomSlack: CGFloat = 3
 
     var expandedWidth: CGFloat {
@@ -63,7 +68,7 @@ struct NotchGeometry: Equatable {
     var windowSize: CGSize {
         CGSize(
             width: expandedWidth + 32,
-            height: hardwareHeight + Self.dropDepth + Self.bottomSlack
+            height: hardwareHeight + max(Self.dropDepth, Self.liveTranslateDepth) + Self.bottomSlack
         )
     }
 
@@ -444,6 +449,18 @@ final class NotchOverlayController {
         model.state = .volume
         model.volumeLevel = CGFloat(max(0, min(1, level)))
         model.volumeMuted = muted
+        revealFromHardwareNotchIfNeeded()
+    }
+
+    func showLiveTranslate(source: String, target: String, partial: Bool) {
+        cancelTimers()
+        guard preparePanel() else { return }
+
+        resetActionMetadata()
+        model.state = .liveTranslate
+        model.translationSource = source
+        model.translationTarget = target
+        model.translationPartial = partial
         revealFromHardwareNotchIfNeeded()
     }
 

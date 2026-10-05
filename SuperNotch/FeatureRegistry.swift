@@ -10,6 +10,7 @@ enum SuperNotchFeatureID: String, CaseIterable, Identifiable {
     case systemPulse
     case quickLinks
     case volumeHUD
+    case liveTranslate
 
     var id: String { rawValue }
 
@@ -22,6 +23,7 @@ enum SuperNotchFeatureID: String, CaseIterable, Identifiable {
         case .systemPulse: return "System Pulse"
         case .quickLinks: return "Dev Quick Links"
         case .volumeHUD: return "Volume HUD"
+        case .liveTranslate: return "Live Translate"
         }
     }
 
@@ -34,6 +36,7 @@ enum SuperNotchFeatureID: String, CaseIterable, Identifiable {
         case .systemPulse: return "CPU, memory and disk at a glance."
         case .quickLinks: return "Jump to the tools you use every day."
         case .volumeHUD: return "Show volume changes from the physical notch and replace the macOS volume OSD when Accessibility access is granted."
+        case .liveTranslate: return "Translate English meeting audio to Indonesian subtitles in real time."
         }
     }
 
@@ -46,13 +49,14 @@ enum SuperNotchFeatureID: String, CaseIterable, Identifiable {
         case .systemPulse: return "waveform.path.ecg"
         case .quickLinks: return "link"
         case .volumeHUD: return "speaker.wave.2"
+        case .liveTranslate: return "captions.bubble"
         }
     }
 
     var isCore: Bool {
         switch self {
         case .fileShelf, .dropZone, .pocketbook, .terminal: return true
-        case .systemPulse, .quickLinks, .volumeHUD: return false
+        case .systemPulse, .quickLinks, .volumeHUD, .liveTranslate: return false
         }
     }
 }
@@ -66,7 +70,7 @@ final class SuperNotchFeatureRegistry: ObservableObject {
     private let defaults = UserDefaults.standard
     private let key = "SuperNotch.enabledFeatures"
     private let schemaKey = "SuperNotch.featureSchemaVersion"
-    private let currentSchemaVersion = 2
+    private let currentSchemaVersion = 3
 
     private init() {
         let saved = defaults.stringArray(forKey: key) ?? []
@@ -78,6 +82,7 @@ final class SuperNotchFeatureRegistry: ObservableObject {
             // New optional features default on for existing installs unless the user
             // has already seen this feature schema and explicitly disabled them.
             parsed.insert(.volumeHUD)
+            parsed.insert(.liveTranslate)
         }
 
         enabled = parsed

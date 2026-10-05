@@ -22,6 +22,8 @@ struct SuperNotchView: View {
             return 58
         case .volume:
             return 66
+        case .liveTranslate:
+            return 92
         default:
             return NotchGeometry.wingWidth
         }
@@ -41,6 +43,8 @@ struct SuperNotchView: View {
             return NotchGeometry.noticeDepth
         case .volume:
             return NotchGeometry.volumeDepth
+        case .liveTranslate:
+            return NotchGeometry.liveTranslateDepth
         }
     }
 
@@ -226,6 +230,43 @@ struct SuperNotchView: View {
                 width: volumeFooterWidth(for: geometry),
                 height: NotchGeometry.volumeDepth
             )
+
+        case .liveTranslate:
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(model.translationPartial ? Color.orange : Color.green)
+                        .frame(width: 6, height: 6)
+                    Text("LIVE TRANSLATE")
+                        .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.72))
+                    Spacer()
+                    Text("EN → ID")
+                        .font(.system(size: 8.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.46))
+                }
+
+                if !model.translationSource.isEmpty {
+                    Text(model.translationSource)
+                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                }
+
+                Text(model.translationTarget.isEmpty ? "Listening…" : model.translationTarget)
+                    .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.96))
+                    .lineLimit(3)
+                    .truncationMode(.tail)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(
+                width: liveTranslateFooterWidth(for: geometry),
+                height: NotchGeometry.liveTranslateDepth,
+                alignment: .topLeading
+            )
         }
     }
 
@@ -306,6 +347,10 @@ struct SuperNotchView: View {
 
     private func volumeFooterWidth(for geometry: NotchGeometry) -> CGFloat {
         geometry.hardwareWidth + 96
+    }
+
+    private func liveTranslateFooterWidth(for geometry: NotchGeometry) -> CGFloat {
+        geometry.hardwareWidth + 164
     }
 
     private var volumeSymbol: String {
@@ -406,6 +451,11 @@ struct SuperNotchView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(model.volumeMuted ? .white.opacity(0.50) : .white.opacity(0.94))
                 .contentTransition(.symbolEffect(.replace))
+
+        case .liveTranslate:
+            Image(systemName: "captions.bubble.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.94))
         }
     }
 
@@ -480,6 +530,11 @@ struct SuperNotchView: View {
                 .font(.system(size: 9.5, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.78))
                 .contentTransition(.numericText())
+
+        case .liveTranslate:
+            Text("ID")
+                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.78))
         }
     }
 
