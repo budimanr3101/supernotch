@@ -236,6 +236,28 @@ jobs:
 
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
+      - name: Ad-hoc sign SuperNotch beta
+        if: env.SIGNING_AVAILABLE != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # TCC permissions such as Screen & System Audio Recording need a
+          # code identity. An entirely unsigned bundle can keep prompting even
+          # after the user enables it in System Settings. Until a stable Apple
+          # signing certificate is configured, give beta builds an ad-hoc
+          # signature so one installed binary keeps a consistent identity.
+          codesign \
+            --force \
+            --deep \
+            --sign - \
+            --entitlements SuperNotch/SuperNotch.entitlements \
+            "$APP_PATH"
+
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign -d -r- --verbose=4 "$APP_PATH" 2>&1 || true
+          echo "ADHOC_SIGNED=1" >> "$GITHUB_ENV"
+
       - name: Create DMG
         shell: bash
         run: |
@@ -320,12 +342,12 @@ jobs:
           4. Launch SuperNotch.
           EOF
           else
-            TITLE="SuperNotch $VERSION (Unsigned Beta)"
+            TITLE="SuperNotch $VERSION (Ad-hoc Signed Beta)"
             cat > "$NOTES_FILE" <<EOF
           # SuperNotch $VERSION
 
           > [!WARNING]
-          > This is an unsigned and non-notarized community build. macOS may block the first launch because Apple cannot verify the developer or notarize this build.
+          > This is an ad-hoc signed and non-notarized community beta. The ad-hoc signature gives this installed build a code identity for macOS privacy permissions, but it is not a Developer ID signature and will not preserve TCC permissions across future app updates.
 
           ## Install
           1. Download \`SuperNotch.dmg\` from this release.
