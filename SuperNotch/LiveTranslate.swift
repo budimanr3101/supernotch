@@ -1,8 +1,65 @@
 import AppKit
+import Carbon.HIToolbox
 import CoreMedia
 import Foundation
 import ScreenCaptureKit
 import Speech
+
+struct LiveTranslateShortcut: Equatable {
+    let keyCode: UInt32
+    let modifiers: UInt32
+    let keyLabel: String
+
+    static let defaultShortcut = LiveTranslateShortcut(
+        keyCode: UInt32(kVK_ANSI_L),
+        modifiers: UInt32(controlKey | optionKey),
+        keyLabel: "L"
+    )
+
+    init(keyCode: UInt32, modifiers: UInt32, keyLabel: String) {
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+        self.keyLabel = keyLabel
+    }
+
+    init?(event: NSEvent) {
+        var modifiers: UInt32 = 0
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags.contains(.command) { modifiers |= UInt32(cmdKey) }
+        if flags.contains(.option) { modifiers |= UInt32(optionKey) }
+        if flags.contains(.control) { modifiers |= UInt32(controlKey) }
+        if flags.contains(.shift) { modifiers |= UInt32(shiftKey) }
+
+        let safeGlobalModifiers = UInt32(cmdKey | optionKey | controlKey)
+        guard modifiers & safeGlobalModifiers != 0 else { return nil }
+
+        let characters = event.charactersIgnoringModifiers?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        let label = (characters?.isEmpty == false ? characters : nil)
+            ?? "Key \(event.keyCode)"
+
+        self.init(
+            keyCode: UInt32(event.keyCode),
+            modifiers: modifiers,
+            keyLabel: label
+        )
+    }
+
+    var displayString: String {
+        var value = ""
+        if modifiers & UInt32(controlKey) != 0 { value += "⌃" }
+        if modifiers & UInt32(optionKey) != 0 { value += "⌥" }
+        if modifiers & UInt32(shiftKey) != 0 { value += "⇧" }
+        if modifiers & UInt32(cmdKey) != 0 { value += "⌘" }
+        return value + keyLabel
+    }
+
+    var conflictsWithFileShelf: Bool {
+        modifiers == UInt32(cmdKey)
+            && (keyCode == UInt32(kVK_ANSI_X) || keyCode == UInt32(kVK_ANSI_V))
+    }
+}
 
 @MainActor
 final class SuperNotchLiveTranslateFeature: NSObject {
@@ -13,8 +70,14 @@ final class SuperNotchLiveTranslateFeature: NSObject {
         case failed(String)
     }
 
+    private static let keyCodeKey = "SuperNotch.LiveTranslate.keyCode"
+    private static let modifiersKey = "SuperNotch.LiveTranslate.modifiers"
+    private static let labelKey = "SuperNotch.LiveTranslate.keyLabel"
+    private let signature: OSType = 0x4E534C54 // NSLT
+
     var onCaption: ((String, String, Bool) -> Void)?
     var onStateChanged: ((State) -> Void)?
+    var onShortcutChanged: (() -> Void)?
 
     private let registry = SuperNotchFeatureRegistry.shared
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
@@ -27,8 +90,26 @@ final class SuperNotchLiveTranslateFeature: NSObject {
     private var streamOutput: LiveTranslateStreamOutput?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    private var shortcut: LiveTranslateShortcut
+    private var hotKey: EventHotKeyRef?
+    private var shortcutInstalled = false
     private var state: State = .idle {
         didSet { onStateChanged?(state) }
+    }
+
+    override init() {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: Self.keyCodeKey) != nil,
+           defaults.object(forKey: Self.modifiersKey) != nil {
+            shortcut = LiveTranslateShortcut(
+                keyCode: UInt32(defaults.integer(forKey: Self.keyCodeKey)),
+                modifiers: UInt32(defaults.integer(forKey: Self.modifiersKey)),
+                keyLabel: defaults.string(forKey: Self.labelKey) ?? "?"
+            )
+        } else {
+            shortcut = .defaultShortcut
+        }
+        super.init()
     }
 
     var isRunning: Bool {
@@ -38,6 +119,90 @@ final class SuperNotchLiveTranslateFeature: NSObject {
         case .idle, .failed:
             return false
         }
+    }
+
+    var isEnabled: Bool {
+        registry.isEnabled(.liveTranslate)
+    }
+
+    var shortcutDescription: String {
+        shortcut.displayString
+    }
+
+    func installShortcut() {
+        guard !shortcutInstalled else { return }
+
+        let handlerStatus = CarbonHotKeyCenter.shared.setHandler(
+            signature: signature,
+            id: 1
+        ) { [weak self] in
+            guard let self else { return OSStatus(eventNotHandledErr) }
+            guard self.isEnabled else {
+                NSSound.beep()
+                return noErr
+            }
+
+            self.toggle()
+            return noErr
+        }
+
+        guard handlerStatus == noErr else {
+            NSLog("[SuperNotch] Live Translate hotkey handler failed: %d", handlerStatus)
+            return
+        }
+
+        shortcutInstalled = true
+        let registerStatus = registerShortcut()
+        if registerStatus != noErr {
+            CarbonHotKeyCenter.shared.removeHandler(signature: signature, id: 1)
+            shortcutInstalled = false
+        }
+
+        NSLog(registerStatus == noErr
+            ? "[SuperNotch] Live Translate shortcut ready on \(shortcut.displayString)"
+            : "[SuperNotch] Live Translate shortcut unavailable: \(shortcut.displayString)")
+    }
+
+    func uninstallShortcut() {
+        if let hotKey {
+            UnregisterEventHotKey(hotKey)
+        }
+        hotKey = nil
+        CarbonHotKeyCenter.shared.removeHandler(signature: signature, id: 1)
+        shortcutInstalled = false
+    }
+
+    func setFeatureEnabled(_ enabled: Bool) {
+        registry.setEnabled(.liveTranslate, enabled: enabled)
+        if !enabled {
+            stop()
+        }
+    }
+
+    func showShortcutRecorder() {
+        let alert = NSAlert()
+        alert.messageText = "Live Translate Shortcut"
+        alert.informativeText = "Press a global shortcut using ⌘, ⌥, or ⌃. Shift may be added."
+
+        let recorder = LiveTranslateShortcutCaptureView(current: shortcut)
+        alert.accessoryView = recorder
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+
+        guard alert.runModal() == .alertFirstButtonReturn,
+              let captured = recorder.captured else { return }
+
+        guard setShortcut(captured) else {
+            let error = NSAlert()
+            error.messageText = "Shortcut Unavailable"
+            error.informativeText = "\(captured.displayString) is already used or reserved."
+            error.alertStyle = .warning
+            error.runModal()
+            return
+        }
+
+        onShortcutChanged?()
     }
 
     func toggle() {
@@ -73,6 +238,50 @@ final class SuperNotchLiveTranslateFeature: NSObject {
     func stop() {
         stopInternals()
         state = .idle
+    }
+
+    private func setShortcut(_ newValue: LiveTranslateShortcut) -> Bool {
+        guard !newValue.conflictsWithFileShelf else { return false }
+
+        let previous = shortcut
+        if let hotKey {
+            UnregisterEventHotKey(hotKey)
+            self.hotKey = nil
+        }
+
+        shortcut = newValue
+
+        if shortcutInstalled, registerShortcut() != noErr {
+            shortcut = previous
+            _ = registerShortcut()
+            return false
+        }
+
+        let defaults = UserDefaults.standard
+        defaults.set(Int(newValue.keyCode), forKey: Self.keyCodeKey)
+        defaults.set(Int(newValue.modifiers), forKey: Self.modifiersKey)
+        defaults.set(newValue.keyLabel, forKey: Self.labelKey)
+        return true
+    }
+
+    private func registerShortcut() -> OSStatus {
+        guard shortcutInstalled else { return OSStatus(eventNotHandledErr) }
+
+        var reference: EventHotKeyRef?
+        let identifier = EventHotKeyID(signature: signature, id: 1)
+        let status = RegisterEventHotKey(
+            shortcut.keyCode,
+            shortcut.modifiers,
+            identifier,
+            GetApplicationEventTarget(),
+            OptionBits(0),
+            &reference
+        )
+
+        if status == noErr {
+            hotKey = reference
+        }
+        return status
     }
 
     private func authorizeSpeech() async throws {
@@ -234,6 +443,67 @@ final class SuperNotchLiveTranslateFeature: NSObject {
         }
 
         return "\(nsError.domain) (\(nsError.code)): \(nsError.localizedDescription)"
+    }
+}
+
+@MainActor
+private final class LiveTranslateShortcutCaptureView: NSView {
+    private let shortcutLabel = NSTextField(labelWithString: "")
+    private let hint = NSTextField(labelWithString: "Press a new shortcut")
+    var captured: LiveTranslateShortcut?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    init(current: LiveTranslateShortcut) {
+        captured = current
+        super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 74))
+
+        shortcutLabel.stringValue = current.displayString
+        shortcutLabel.font = .systemFont(ofSize: 24, weight: .semibold)
+        shortcutLabel.alignment = .center
+
+        hint.font = .systemFont(ofSize: 11)
+        hint.alignment = .center
+        hint.textColor = .secondaryLabelColor
+
+        [shortcutLabel, hint].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            addSubview($0)
+        }
+
+        NSLayoutConstraint.activate([
+            shortcutLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            shortcutLabel.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            hint.centerXAnchor.constraint(equalTo: centerXAnchor),
+            hint.topAnchor.constraint(equalTo: shortcutLabel.bottomAnchor, constant: 6),
+        ])
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self)
+        }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard let value = LiveTranslateShortcut(event: event),
+              !value.conflictsWithFileShelf else {
+            NSSound.beep()
+            hint.stringValue = "Use modifier + key. Cmd+X / Cmd+V are reserved."
+            return
+        }
+
+        captured = value
+        shortcutLabel.stringValue = value.displayString
+        hint.stringValue = "Ready to save"
+        NSHapticFeedbackManager.defaultPerformer.perform(
+            .alignment,
+            performanceTime: .now
+        )
     }
 }
 

@@ -143,6 +143,11 @@ private final class NotchWindow: NSPanel {
 
 // MARK: - Primary notch surface ownership
 
+private extension Notification.Name {
+    static let superNotchPrimarySurfaceDidActivate =
+        Notification.Name("SuperNotchPrimarySurfaceDidActivate")
+}
+
 private enum NotchPrimarySurface: String {
     case terminal
     case pocketbook
@@ -222,6 +227,11 @@ private final class NotchSurfaceManager {
 
         activeWindow = window
         activeSurface = nextSurface
+
+        NotificationCenter.default.post(
+            name: .superNotchPrimarySurfaceDidActivate,
+            object: window
+        )
     }
 
     private func surface(for window: NSWindow) -> NotchPrimarySurface? {
@@ -291,6 +301,12 @@ final class NotchOverlayController {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(primarySurfaceActivated),
+            name: .superNotchPrimarySurfaceDidActivate,
+            object: nil
+        )
     }
 
     deinit {
@@ -302,6 +318,12 @@ final class NotchOverlayController {
         if preparePanel() {
             panel?.orderFrontRegardless()
         }
+    }
+
+    @objc private func primarySurfaceActivated() {
+        cancelTimers()
+        model.presented = false
+        panel?.orderOut(nil)
     }
 
     // MARK: File Shelf
