@@ -5,7 +5,7 @@ import Translation
 
 @MainActor
 final class NotchOverlayModel: ObservableObject {
-    private static let NotchOverlayModel.liveTranslateShowSourceKey = "SuperNotch.LiveTranslate.showSource"
+    private static let liveTranslateShowSourceKey = "SuperNotch.LiveTranslate.showSource"
     enum State: Equatable {
         case staged
         case moving
