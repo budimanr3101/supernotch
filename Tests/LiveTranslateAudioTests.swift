@@ -65,7 +65,9 @@ struct LiveTranslateAudioTests {
         precondition(!SNPCMQueueHasData(q))
         // Reject a malformed byte size instead of copying beyond allocation.
         list[0].mDataByteSize = frames * bytesPerFrame + 1
-        SNPCMQueuePush(q, input.audioBufferList)
+        // Use the borrowed list directly: AVAudioPCMBuffer.audioBufferList
+        // refreshes byte sizes from frameLength when fetched again.
+        SNPCMQueuePush(q, list.unsafeMutablePointer)
         precondition(SNPCMQueueTakeFault(q))
         precondition(!SNPCMQueueHasData(q))
     }
