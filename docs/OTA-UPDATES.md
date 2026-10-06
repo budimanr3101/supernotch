@@ -11,7 +11,7 @@ SuperNotch uses Sparkle 2 for in-app over-the-air updates.
 5. The archive is verified with the SuperNotch EdDSA public key embedded in `Info.plist`.
 6. Sparkle installs the update and relaunches SuperNotch.
 
-The updater does not require an Apple Developer Program membership. Developer ID signing and notarization can be added later to improve Gatekeeper behavior, while Sparkle's EdDSA signature protects the update archive itself.
+The updater does not require an Apple Developer Program membership. Developer ID signing and notarization can be added later to improve Gatekeeper behavior, while Sparkle's EdDSA signature protects the update archive itself. That archive signature does not make an ad-hoc app's TCC identity stable across updates; system-audio and Speech consent may need granting again.
 
 ## Signing key
 
@@ -29,7 +29,7 @@ Create this repository Actions secret:
 SPARKLE_PRIVATE_KEY
 ```
 
-Set its value to the base64 private seed generated for SuperNotch. Keep an offline backup. Losing this key means existing unsigned SuperNotch installations cannot verify updates signed by a replacement key without an explicit migration path.
+Set its value to the base64 private seed generated for SuperNotch. Keep an offline backup. Losing this key means existing SuperNotch installations cannot verify updates signed by a replacement key without an explicit migration path.
 
 ## Release pipeline
 

@@ -24,6 +24,8 @@
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>SuperNotch reads your Finder selection and current folder so Cmd+X and Cmd+V can move files through the notch shelf.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>SuperNotch captures system output audio to transcribe English speech and show Indonesian meeting subtitles. It does not capture your screen or microphone.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>SuperNotch uses speech recognition to turn meeting audio into live translated subtitles.</string>
     <key>NSPrincipalClass</key>

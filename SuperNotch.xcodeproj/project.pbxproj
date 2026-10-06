@@ -33,6 +33,8 @@
 		A1000000000000000000001A /* LiveTranslate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001A /* LiveTranslate.swift */; };
 		A20000000000000000000001 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = J20000000000000000000001 /* SwiftTerm */; };
 		A20000000000000000000002 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = J20000000000000000000002 /* Sparkle */; };
+		A1000000000000000000001B /* SystemAudioTap.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001B /* SystemAudioTap.swift */; };
+		A1000000000000000000001C /* PCMQueue.c in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000001C /* PCMQueue.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,6 +64,9 @@
 		B10000000000000000000018 /* UpdateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateSettingsView.swift; sourceTree = "<group>"; };
 		B10000000000000000000019 /* VolumeHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeHUD.swift; sourceTree = "<group>"; };
 		B1000000000000000000001A /* LiveTranslate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranslate.swift; sourceTree = "<group>"; };
+		B1000000000000000000001B /* SystemAudioTap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioTap.swift; sourceTree = "<group>"; };
+		B1000000000000000000001C /* PCMQueue.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = PCMQueue.c; sourceTree = "<group>"; };
+		B1000000000000000000001D /* PCMQueue.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PCMQueue.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -95,6 +100,9 @@
 				B10000000000000000000018 /* UpdateSettingsView.swift */,
 				B10000000000000000000019 /* VolumeHUD.swift */,
 				B1000000000000000000001A /* LiveTranslate.swift */,
+				B1000000000000000000001D /* PCMQueue.h */,
+				B1000000000000000000001C /* PCMQueue.c */,
+				B1000000000000000000001B /* SystemAudioTap.swift */,
 				B10000000000000000000016 /* FeatureRegistry.swift */,
 				B10000000000000000000017 /* DeveloperCommandCenter.swift */,
 				B10000000000000000000003 /* ShelfCoordinator.swift */,
@@ -209,6 +217,8 @@
 				A10000000000000000000018 /* UpdateSettingsView.swift in Sources */,
 				A10000000000000000000019 /* VolumeHUD.swift in Sources */,
 				A1000000000000000000001A /* LiveTranslate.swift in Sources */,
+				A1000000000000000000001C /* PCMQueue.c in Sources */,
+				A1000000000000000000001B /* SystemAudioTap.swift in Sources */,
 				A10000000000000000000016 /* FeatureRegistry.swift in Sources */,
 				A10000000000000000000017 /* DeveloperCommandCenter.swift in Sources */,
 				A10000000000000000000003 /* ShelfCoordinator.swift in Sources */,
@@ -295,6 +305,8 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+				SWIFT_OBJC_BRIDGING_HEADER = SuperNotch/PCMQueue.h;
+				CODE_SIGN_ENTITLEMENTS = SuperNotch/SuperNotch.entitlements;
 			};
 			name = Debug;
 		};
@@ -318,6 +330,8 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+				SWIFT_OBJC_BRIDGING_HEADER = SuperNotch/PCMQueue.h;
+				CODE_SIGN_ENTITLEMENTS = SuperNotch/SuperNotch.entitlements;
 			};
 			name = Release;
 		};

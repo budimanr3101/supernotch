@@ -6,6 +6,7 @@ on:
       - main
       - 'hardening/**'
       - 'branding/**'
+      - 'fix/**'
   pull_request:
     branches:
       - main
@@ -22,7 +23,7 @@ jobs:
   build:
     name: Build SuperNotch
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -49,6 +50,25 @@ jobs:
 
       - name: Show Xcode version
         run: xcodebuild -version
+
+      - name: Verify SDK availability and PCM bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk macosx --show-sdk-path)"
+          xcrun --sdk macosx --show-sdk-version
+          grep -A 4 'AudioHardwareCreateProcessTap' "$SDK/System/Library/Frameworks/CoreAudio.framework/Headers/AudioHardwareTapping.h"
+          xcrun clang -std=c11 -Wall -Wextra -Werror -isysroot "$SDK" -mmacosx-version-min=15.0 \
+            -fsanitize=address -c SuperNotch/PCMQueue.c -o "$RUNNER_TEMP/PCMQueue.o"
+          xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macosx15.0" \
+            -sanitize=address -import-objc-header SuperNotch/PCMQueue.h \
+            SuperNotch/SystemAudioTap.swift Tests/LiveTranslateAudioTests.swift \
+            "$RUNNER_TEMP/PCMQueue.o" -o "$RUNNER_TEMP/live-translate-audio-tests"
+          "$RUNNER_TEMP/live-translate-audio-tests"
+          xcrun clang -std=c11 -Wall -Wextra -Werror -isysroot "$SDK" -mmacosx-version-min=15.0 \
+            -fsanitize=thread SuperNotch/PCMQueue.c Tests/PCMQueueStressTests.c \
+            -o "$RUNNER_TEMP/pcm-queue-stress"
+          "$RUNNER_TEMP/pcm-queue-stress"
 
       - name: Validate shared scheme
         run: |
@@ -93,3 +113,27 @@ jobs:
           echo "CFBundleIconName=${ICON_NAME:-<none>}"
           echo "CFBundleIconFile=${ICON_FILE:-<none>}"
           find "$RESOURCES" -maxdepth 1 -type f \( -name 'Assets.car' -o -name '*.icns' \) -print
+
+      - name: Build Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project SuperNotch.xcodeproj \
+            -scheme SuperNotch \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/SuperNotchDerivedData" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+            build
+
+      - name: Verify audio-only privacy metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/SuperNotchDerivedData/Build/Products/Release/SuperNotch.app"
+          /usr/libexec/PlistBuddy -c 'Print :NSAudioCaptureUsageDescription' "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' "$APP/Contents/Info.plist"
+          if grep -E 'SCStream|SCShareableContent|ScreenCaptureKit' SuperNotch/LiveTranslate.swift SuperNotch/SystemAudioTap.swift; then
+            echo "Obsolete screen capture path in Live Translate"; exit 1
+          fi

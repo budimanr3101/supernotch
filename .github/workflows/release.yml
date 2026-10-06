@@ -9,7 +9,7 @@ on:
         default: 0.1.0
         type: string
       publish:
-        description: Publish a GitHub Release (unsigned builds are allowed with a warning)
+        description: Publish a GitHub Release (Developer ID or ad-hoc signed beta)
         required: true
         default: false
         type: boolean
@@ -26,8 +26,10 @@ on:
       - main
     paths:
       - '.github/workflows/release.yml'
+      - '.github/workflows/macos-ci.yml'
       - 'SuperNotch.xcodeproj/**'
-      - 'SuperNotch/SuperNotch.entitlements'
+      - 'SuperNotch/**'
+      - 'Tests/**'
       - 'SuperNotch/Assets.xcassets/**'
       - 'SuperNotch/Branding/**'
       - 'docs/RELEASING.md'
@@ -38,7 +40,7 @@ permissions:
 
 concurrency:
   group: macos-release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   release:
@@ -242,11 +244,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          # TCC permissions such as Screen & System Audio Recording need a
-          # code identity. An entirely unsigned bundle can keep prompting even
-          # after the user enables it in System Settings. Until a stable Apple
-          # signing certificate is configured, give beta builds an ad-hoc
-          # signature so one installed binary keeps a consistent identity.
+          # Audio-only capture and Speech still need TCC consent. Ad-hoc signing
+          # provides integrity for this beta binary, but its code requirement
+          # changes across builds. It does not preserve privacy consent on update.
           codesign \
             --force \
             --deep \
@@ -255,8 +255,26 @@ jobs:
             "$APP_PATH"
 
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-          codesign -d -r- --verbose=4 "$APP_PATH" 2>&1 || true
           echo "ADHOC_SIGNED=1" >> "$GITHUB_ENV"
+
+      - name: Verify signing identity and privacy metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          INFO="$APP_PATH/Contents/Info.plist"
+          echo "Bundle identifier:"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO"
+          /usr/libexec/PlistBuddy -c 'Print :NSAudioCaptureUsageDescription' "$INFO"
+          /usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' "$INFO"
+          echo "Signature, TeamIdentifier, and designated requirement:"
+          codesign -d -r- --verbose=4 "$APP_PATH" 2>&1
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          echo "Code signing verification: PASS"
+          if [[ "$SIGNING_AVAILABLE" == '1' ]]; then
+            echo "Signing mode: Developer ID; stable identity when identifier/certificate requirement is preserved"
+          else
+            echo "Signing mode: ad-hoc beta; TCC consent may need granting again after replacing this build"
+          fi
 
       - name: Create DMG
         shell: bash
@@ -302,6 +320,28 @@ jobs:
         if: env.SIGNING_AVAILABLE != '1' || env.NOTARY_AVAILABLE != '1'
         run: echo "NOTARIZED=0" >> "$GITHUB_ENV"
 
+      - name: Verify packaged app and record build provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          MOUNT="$RUNNER_TEMP/supernotch-package-check"
+          mkdir -p "$MOUNT"
+          hdiutil attach "$DMG_PATH" -nobrowse -readonly -mountpoint "$MOUNT"
+          trap 'hdiutil detach "$MOUNT" >/dev/null || true' EXIT
+          PACKAGED="$MOUNT/${APP_NAME}.app"
+          codesign --verify --deep --strict --verbose=2 "$PACKAGED"
+          diff "$APP_PATH/Contents/Info.plist" "$PACKAGED/Contents/Info.plist"
+          {
+            echo "Event: $GITHUB_EVENT_NAME"
+            echo "Commit: $GITHUB_SHA"
+            echo "PR head: ${{ github.event.pull_request.head.sha }}"
+            echo "Version: $VERSION (PR artifact; no public release when PUBLISH=false)"
+            echo "Developer ID: $SIGNING_AVAILABLE"
+            echo "Notarized: $NOTARIZED"
+            codesign -d -r- --verbose=4 "$PACKAGED" 2>&1
+            echo "Packaged code signing verification: PASS"
+          } > "$RUNNER_TEMP/build-provenance.txt"
+
       - name: Generate checksum
         shell: bash
         run: |
@@ -315,6 +355,7 @@ jobs:
           path: |
             ${{ env.DMG_PATH }}
             ${{ env.DMG_PATH }}.sha256
+            ${{ runner.temp }}/build-provenance.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -340,6 +381,16 @@ jobs:
           2. Open the DMG.
           3. Drag SuperNotch to Applications.
           4. Launch SuperNotch.
+          EOF
+          elif [[ "$SIGNING_AVAILABLE" == "1" ]]; then
+            TITLE="SuperNotch $VERSION (Developer ID Signed Beta)"
+            cat > "$NOTES_FILE" <<EOF
+          # SuperNotch $VERSION
+
+          > [!WARNING]
+          > This build is Developer ID signed but not notarized. Configure Apple notarization credentials before a stable release.
+
+          Download \`SuperNotch.dmg\`, install in Applications, and use macOS Privacy & Security if Gatekeeper requires approval.
           EOF
           else
             TITLE="SuperNotch $VERSION (Ad-hoc Signed Beta)"

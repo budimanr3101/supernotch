@@ -2,7 +2,7 @@
 
 SuperNotch supports two macOS distribution modes:
 
-1. **Unsigned community release** — free, no Apple Developer Program required. The DMG can be published to GitHub Releases, but macOS may block the first launch until the user explicitly allows the app in System Settings → Privacy & Security.
+1. **Ad-hoc signed community beta** — free, no Apple Developer Program required. The DMG can be published to GitHub Releases, but macOS may block the first launch until the user explicitly allows the app in System Settings → Privacy & Security.
 2. **Developer ID signed and Apple-notarized release** — preferred when Apple Developer credentials are available. The same workflow automatically uses signing and notarization when the required GitHub secrets exist.
 
 Public releases use the stable asset name `SuperNotch.dmg`. This keeps the README download URL stable across versions:
@@ -17,19 +17,26 @@ The GitHub Release tag still carries the version, for example `v0.2.0`.
 
 The official SN monogram icon is compiled natively from `SuperNotch/Assets.xcassets/AppIcon.appiconset`. The Xcode target uses `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`, so local Debug builds and packaged Release builds use the same asset catalog. CI verifies the compiled `Assets.car` and bundle icon metadata before a DMG is accepted.
 
-## Free unsigned release
+## Free ad-hoc signed beta
 
 No Apple credentials are required.
 
 The workflow will:
 
 1. Build SuperNotch in Release configuration, including the native AppIcon asset catalog.
-2. Verify the compiled app icon metadata.
+2. Verify the compiled app icon metadata, ad-hoc sign the app with its entitlements, and verify its strict/deep code signature.
 3. Create `SuperNotch.dmg` with an Applications shortcut.
 4. Verify the DMG with `hdiutil verify`.
 5. Generate `SuperNotch.dmg.sha256`.
 6. Upload the DMG as a GitHub Actions artifact.
-7. Publish a GitHub Release with an explicit **Unsigned Beta** warning and Gatekeeper instructions.
+7. Publish a GitHub Release with an explicit **Ad-hoc Signed Beta** warning and Gatekeeper instructions.
+
+Ad-hoc signing supplies no TeamIdentifier and its designated requirement can change
+with each build. System Audio Recording Only and Speech consent may need granting
+again after an update. Core Audio taps remove display capture from Live Translate;
+they do not stabilize signing identity. CI records the bundle identifier, signature,
+TeamIdentifier, designated requirement and verification result without exposing secrets.
+See [Live Translate](LIVE-TRANSLATE.md) for privacy details.
 
 Users may need to try opening SuperNotch once, then go to **System Settings → Privacy & Security → Open Anyway** and confirm **Open**.
 
@@ -53,7 +60,7 @@ When all required credentials are available, the workflow automatically:
 3. Applies the Apple Events entitlement required for Finder automation.
 4. Submits the DMG to Apple notarization.
 5. Staples and validates the notarization ticket.
-6. Publishes the release without the unsigned-build warning.
+6. Publishes the release as signed and notarized. If only signing credentials are available, it is labelled Developer ID Signed Beta without claiming notarization.
 
 ## Release trigger
 
@@ -65,14 +72,14 @@ The workflow also supports manual runs from **Actions → macOS Release**.
 
 ## Runtime testing
 
-CI proves that the project builds, the app icon is compiled into the bundle, and the DMG can be packaged. It does not prove the notch UI or terminal works correctly on real hardware.
+PR CI builds Debug and Release, tests the PCM queue/converter with sanitizers, verifies the icon/privacy metadata, and packages a signed DMG with checksum and provenance. PR builds are ad-hoc signed without certificate secrets and publish no release. It does not prove the notch UI or terminal works correctly on real hardware.
 
 Before promoting a build broadly, test at minimum:
 
 - SuperNotch shows the SN monogram icon in Xcode/local builds, Finder, and the mounted DMG.
 - DMG opens normally.
 - Dragging SuperNotch into Applications works.
-- The Gatekeeper flow matches the documented unsigned-install instructions.
+- The Gatekeeper flow matches the documented beta-install instructions.
 - Finder Automation permission can be granted.
 - File Shelf `Cmd + X` / `Cmd + V` works.
 - Drop Zone works.
@@ -80,6 +87,9 @@ Before promoting a build broadly, test at minimum:
 - Native terminal input, Tab completion, history, `Ctrl + R`, `Ctrl + C`, `vi`/`nvim`/`less`, and shell startup files behave correctly.
 - The mini terminal activity does not appear while the full terminal remains visible.
 - Only one primary notch surface is visible at a time.
+- Live Translate audio-only TCC, YouTube EN → ID, repeated stop/start, background processing under primary surfaces, enable/source persistence, output switching, and quit/relaunch pass the [runtime procedure](LIVE-TRANSLATE.md).
+
+Keep experimental changes on a feature branch. Do not change RELEASE_VERSION or RELEASE_TRIGGER until CI, packaging, signature checks, diff review, and real-Mac acceptance succeed.
 
 ## Local checksum verification
 

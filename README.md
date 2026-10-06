@@ -40,7 +40,7 @@ Unlike a detached floating pill, SuperNotch is designed around the real display 
 SuperNotch runs as a menu bar utility, so it does not keep a normal Dock window open.
 
 > [!WARNING]
-> Current free releases are **unsigned and not Apple-notarized**. macOS may warn that the developer cannot be verified or that Apple cannot check the app for malicious software. Only download SuperNotch from this official GitHub repository and verify the included SHA-256 checksum if you want to confirm the downloaded DMG matches the published artifact.
+> Current free beta releases are **ad-hoc signed and not Apple-notarized**. Ad-hoc signing verifies this binary, but replacing it with another build may require granting macOS privacy permissions again. macOS may warn that the developer cannot be verified or that Apple cannot check the app for malicious software. Only download SuperNotch from this official GitHub repository and verify the included SHA-256 checksum if you want to confirm the downloaded DMG matches the published artifact.
 
 ## What SuperNotch can do
 
@@ -170,7 +170,7 @@ Issues and pull requests are welcome. For UI changes, please preserve the physic
 
 ## Release process
 
-Maintainer instructions for unsigned community releases and optional Developer ID signing / Apple notarization are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
+Maintainer instructions for ad-hoc signed community betas and optional Developer ID signing / Apple notarization are documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 
 CI passing means the project compiles successfully on GitHub's macOS runner. Interactive terminal behavior, notch placement, drag behavior, and other UI details still require real-Mac runtime testing before a public release.
 

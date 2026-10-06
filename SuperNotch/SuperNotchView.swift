@@ -121,21 +121,28 @@ struct SuperNotchView: View {
             )
             .ignoresSafeArea()
             .translationTask(model.translationConfiguration) { session in
+                let generation = model.translationGeneration
+                defer { model.finishTranslation(generation: generation) }
                 guard model.state == .liveTranslate else { return }
 
-                let source = model.translationSource
+                let source = model.translationRequestSource
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !source.isEmpty else { return }
 
                 do {
                     let response = try await session.translate(source)
-                    guard model.translationSource == source else { return }
+                    guard !Task.isCancelled, model.state == .liveTranslate,
+                          model.translationConfiguration != nil,
+                          model.translationGeneration == generation else { return }
                     model.translationTarget = response.targetText
                 } catch {
-                    guard model.translationSource == source else { return }
-                    model.translationTarget = "Translation unavailable: \(error.localizedDescription)"
+                    guard !Task.isCancelled, model.state == .liveTranslate,
+                          model.translationConfiguration != nil,
+                          model.translationGeneration == generation else { return }
+                    model.translationTarget = "Terjemahan tidak tersedia. Periksa koneksi dan model bahasa English/Indonesian."
                     model.translationPartial = false
-                    NSLog("[SuperNotch] Translation error: %@", error.localizedDescription)
+                    let failure = error as NSError
+                    NSLog("[SuperNotch] Translation failure: domain=%@ code=%ld", failure.domain, failure.code)
                 }
             }
         }
