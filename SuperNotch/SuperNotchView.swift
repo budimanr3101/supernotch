@@ -134,7 +134,9 @@ struct SuperNotchView: View {
                           model.translationSource == source else { return }
                     model.translationTarget = response.targetText
                 } catch {
-                    guard model.translationSource == source else { return }
+                    guard !Task.isCancelled, model.state == .liveTranslate,
+                          model.translationConfiguration != nil,
+                          model.translationSource == source else { return }
                     model.translationTarget = "Terjemahan tidak tersedia. Periksa koneksi dan model bahasa English/Indonesian."
                     model.translationPartial = false
                     let failure = error as NSError

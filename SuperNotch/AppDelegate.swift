@@ -82,7 +82,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         liveTranslate.onStateChanged = { [weak self] state in
             self?.updateLiveTranslateUI()
-            if state == .idle { self?.coordinator.stopLiveTranslatePresentation() }
+            switch state {
+            case .idle, .failed:
+                self?.coordinator.stopLiveTranslatePresentation()
+            case .starting, .listening:
+                break
+            }
         }
         liveTranslate.onShortcutChanged = { [weak self] in
             self?.updateLiveTranslateUI()

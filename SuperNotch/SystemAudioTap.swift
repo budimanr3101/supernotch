@@ -1,12 +1,12 @@
 import AVFoundation
 import CoreAudio
 import Foundation
-import Speech
+@preconcurrency import Speech
 
 /// HAL callback -> bounded copied PCM -> serial worker -> 16 kHz mono Speech.
 /// All HAL setup, listener bookkeeping, request appends and teardown use worker.
 /// The callback only calls the preallocated, lock-free C queue; it owns no UI.
-final class LiveTranslateSystemAudioTap {
+final class LiveTranslateSystemAudioTap: @unchecked Sendable {
     private static let worker = DispatchQueue(label: "com.budiman.supernotch.audio-tap", qos: .userInitiated)
     private let maxFrames: UInt32 = 16_384
     private var tapID = AudioObjectID(kAudioObjectUnknown)
@@ -162,6 +162,9 @@ final class LiveTranslateSystemAudioTap {
             guard let pcm = AVAudioPCMBuffer(pcmFormat: bridge.inputFormat, frameCapacity: maxFrames) else {
                 fail(SystemAudioTapError.buffer); return
             }
+            // AVAudioPCMBuffer starts with frameLength=0 and zero byte sizes.
+            // Publish allocated capacity before asking C to fill that storage.
+            pcm.frameLength = maxFrames
             var frames: UInt32 = 0
             guard SNPCMQueueRead(ring, pcm.mutableAudioBufferList, maxFrames, &frames) else {
                 fail(SystemAudioTapError.buffer); return
@@ -282,7 +285,10 @@ final class LiveTranslateSystemAudioTap {
         var value: CFString = "" as CFString
         var size = UInt32(MemoryLayout<CFString>.size)
         var address = Self.address(selector)
-        try check(AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value), "read device/tap UID")
+        let status = withUnsafeMutablePointer(to: &value) {
+            AudioObjectGetPropertyData(object, &address, 0, nil, &size, $0)
+        }
+        try check(status, "read device/tap UID")
         return value as String
     }
 
@@ -290,7 +296,11 @@ final class LiveTranslateSystemAudioTap {
                          scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal, into value: inout T) throws {
         var address = Self.address(selector, scope: scope)
         var size = UInt32(MemoryLayout<T>.size)
-        try check(AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value), "read audio property \(selector)")
+        // Only fixed-size imported C structs/scalars are passed by this service.
+        let status = withUnsafeMutablePointer(to: &value) {
+            AudioObjectGetPropertyData(object, &address, 0, nil, &size, $0)
+        }
+        try check(status, "read audio property \(selector)")
     }
 
     private static func address(_ selector: AudioObjectPropertySelector,

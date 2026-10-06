@@ -35,6 +35,7 @@ struct LiveTranslateAudioTests {
         // HAL reuses its memory immediately. The copied queue must stay intact.
         for b in list { memset(b.mData!, 0, Int(b.mDataByteSize)) }
         let copied = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
+        copied.frameLength = frames
         var readFrames: UInt32 = 0
         precondition(SNPCMQueueRead(q, copied.mutableAudioBufferList, frames, &readFrames))
         copied.frameLength = readFrames
@@ -58,6 +59,7 @@ struct LiveTranslateAudioTests {
         precondition(SNPCMQueueTakeDrops(q) == 1)
         for _ in 0..<32 {
             let out = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
+            out.frameLength = frames
             precondition(SNPCMQueueRead(q, out.mutableAudioBufferList, frames, &readFrames))
         }
         precondition(!SNPCMQueueHasData(q))
