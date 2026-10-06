@@ -356,8 +356,14 @@ final class SuperNotchLiveTranslateFeature: NSObject {
         recognitionRequest = request
         recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
             // Extract values before hopping actors; never log transcript text.
-            let text = result?.bestTranscription.formattedString
+            let formatted = result?.bestTranscription.formattedString
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            // A Speech request accumulates its transcript. Keep recent words
+            // visible instead of clipping the same opening paragraph for 50 s.
+            let text = formatted.map { value in
+                value.split(whereSeparator: { $0.isWhitespace })
+                    .suffix(48).joined(separator: " ")
+            }
             let final = result?.isFinal == true
             Task { @MainActor in
                 guard let self = self, self.sessionID == token,

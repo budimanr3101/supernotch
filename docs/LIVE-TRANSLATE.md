@@ -35,7 +35,9 @@ worker cleanup stops/destroys IOProc, aggregate and tap, removes property
 listeners, ends Speech input, and releases buffers. App termination waits for
 cleanup. Default output, output sample-rate/aliveness, and tap-format changes
 rebuild capture with a fresh converter and Speech request. Online Speech requests
-rotate every 50 seconds and after final results; service failures are reported,
+rotate every 50 seconds and after final results; captions use the most recent
+48 words so the small teleprompter does not remain clipped to an old paragraph;
+service failures are reported,
 rather than showing an apparently listening but dead engine.
 
 Translation partials are coalesced to at most four requests per second, with only
