@@ -48,6 +48,9 @@ final class NotchOverlayModel: ObservableObject {
         UserDefaults.standard.set(show, forKey: NotchOverlayModel.liveTranslateShowSourceKey)
     }
 
+    private static let realtimeTranslationWordLimit = 18
+    private static let translationDebounceMilliseconds = 120
+
     private var pendingTranslation: DispatchWorkItem?
     private var lastRequestedSource = ""
     private var translationInFlight = false
@@ -67,22 +70,40 @@ final class NotchOverlayModel: ObservableObject {
         translationPartial = false
     }
 
+    /// Speech partials are cumulative. Sending the entire rolling transcript to
+    /// Translation makes the Indonesian subtitle trail several seconds behind.
+    /// Keep the longer English transcript for display, but translate only the
+    /// newest short phrase so the subtitle behaves like a live teleprompter.
+    private func realtimeTranslationSource(from source: String) -> String {
+        source
+            .split(whereSeparator: { $0.isWhitespace })
+            .suffix(Self.realtimeTranslationWordLimit)
+            .joined(separator: " ")
+    }
+
     func requestTranslation(source: String, partial: Bool) {
         translationSource = source
         translationPartial = partial
-        guard source != lastRequestedSource else { return }
+
+        let latest = realtimeTranslationSource(from: source)
+        guard !latest.isEmpty, latest != lastRequestedSource else { return }
+
         // Keep the previous translation readable while newer partials arrive.
         if translationTarget.isEmpty { translationTarget = "Translating…" }
         guard pendingTranslation == nil, !translationInFlight else { return }
+
         let work = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.pendingTranslation = nil
-            guard !self.translationSource.isEmpty,
-                  self.translationSource != self.lastRequestedSource else { return }
+
+            let newest = self.realtimeTranslationSource(from: self.translationSource)
+            guard !newest.isEmpty, newest != self.lastRequestedSource else { return }
             guard self.state == .liveTranslate else { return }
-            self.lastRequestedSource = self.translationSource
-            self.translationRequestSource = self.translationSource
+
+            self.lastRequestedSource = newest
+            self.translationRequestSource = newest
             self.translationInFlight = true
+
             var configuration = self.translationConfiguration
                 ?? TranslationSession.Configuration(
                     source: Locale.Language(identifier: "en"),
@@ -91,15 +112,23 @@ final class NotchOverlayModel: ObservableObject {
             configuration.invalidate()
             self.translationConfiguration = configuration
         }
+
         pendingTranslation = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(250), execute: work)
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + .milliseconds(Self.translationDebounceMilliseconds),
+            execute: work
+        )
     }
+
     func finishTranslation(generation: UUID) {
         guard generation == translationGeneration else { return }
         translationInFlight = false
-        // Never cancel a running translation for newer Speech partials. Once it
-        // finishes, translate the newest available text and discard intermediates.
-        if !translationSource.isEmpty && translationSource != lastRequestedSource {
+
+        // One translation at a time avoids TranslationSession churn. As soon as
+        // it finishes, immediately catch up to the newest short phrase rather
+        // than retranslating the whole accumulated paragraph.
+        let newest = realtimeTranslationSource(from: translationSource)
+        if !newest.isEmpty && newest != lastRequestedSource {
             requestTranslation(source: translationSource, partial: translationPartial)
         }
     }
