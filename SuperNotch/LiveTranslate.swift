@@ -1,8 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
-import CoreMedia
 import Foundation
-import ScreenCaptureKit
 import Speech
 
 struct LiveTranslateShortcut: Equatable {
@@ -81,13 +79,11 @@ final class SuperNotchLiveTranslateFeature: NSObject {
 
     private let registry = SuperNotchFeatureRegistry.shared
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-    private let audioQueue = DispatchQueue(
-        label: "com.budiman.supernotch.live-translate.audio",
-        qos: .userInitiated
-    )
-
-    private var stream: SCStream?
-    private var streamOutput: LiveTranslateStreamOutput?
+    private var capture: LiveTranslateSystemAudioTap?
+    private var startTask: Task<Void, Never>?
+    private var renewalTask: Task<Void, Never>?
+    private var sessionID = UUID()
+    private var recognitionID = UUID()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var shortcut: LiveTranslateShortcut
@@ -216,28 +212,59 @@ final class SuperNotchLiveTranslateFeature: NSObject {
             return
         }
 
+        let token = UUID()
+        sessionID = token
         state = .starting
         onCaption?("", "Starting Live Translate…", true)
+        NSLog("[SuperNotch] Live Translate starting")
 
-        Task {
+        startTask = Task { [weak self] in
+            guard let self = self else { return }
             do {
-                try await authorizeSpeech()
-                try await startRecognition()
-                try await startSystemAudioCapture()
-                state = .listening
-                onCaption?("", "Listening to meeting audio…", true)
+                try await self.authorizeSpeech()
+                try Task.checkCancellation()
+                guard self.sessionID == token else { return }
+
+                let capture = LiveTranslateSystemAudioTap()
+                self.capture = capture
+                capture.onFailure = { [weak self] error in
+                    Task { @MainActor in
+                        guard let self = self, self.sessionID == token else { return }
+                        self.fail(error)
+                    }
+                }
+                capture.onDeviceChanged = { [weak self] in
+                    Task { @MainActor in
+                        guard let self = self, self.sessionID == token, self.isRunning else { return }
+                        do {
+                            let request = try self.startRecognition(session: token)
+                            self.capture?.replaceRequest(request)
+                        } catch { self.fail(error) }
+                    }
+                }
+                let request = try self.startRecognition(session: token)
+                try await capture.start(request: request)
+                try Task.checkCancellation()
+                guard self.sessionID == token else { return }
+                self.state = .listening
+                self.onCaption?("", "Listening to system audio…", true)
             } catch {
-                stopInternals()
-                let message = userFacingMessage(for: error)
-                state = .failed(message)
-                onCaption?("", message, false)
+                guard self.sessionID == token, !Task.isCancelled else { return }
+                self.fail(error)
             }
         }
     }
 
-    func stop() {
-        stopInternals()
+    func stop(waitForCleanup: Bool = false) {
+        stopInternals(wait: waitForCleanup)
         state = .idle
+    }
+
+    private func fail(_ error: Error) {
+        let message = userFacingMessage(for: error)
+        stopInternals()
+        state = .failed(message)
+        onCaption?("", message, false)
     }
 
     private func setShortcut(_ newValue: LiveTranslateShortcut) -> Bool {
@@ -300,128 +327,74 @@ final class SuperNotchLiveTranslateFeature: NSObject {
         }
     }
 
-    private func startRecognition() async throws {
+    private func startRecognition(session token: UUID) throws -> SFSpeechAudioBufferRecognitionRequest {
+        renewalTask?.cancel()
+        recognitionID = UUID()
+        let speechToken = recognitionID
         recognitionTask?.cancel()
-        recognitionRequest?.endAudio()
-
+        // Capture owns append/endAudio on its serial worker. Cancelling this task
+        // does not race a request mutation on MainActor.
+        recognitionRequest = nil
+        guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
+            throw LiveTranslateError.speechUnavailable
+        }
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.requiresOnDeviceRecognition = false
-        if #available(macOS 13.0, *) {
-            request.addsPunctuation = true
-        }
-
+        request.addsPunctuation = true
         recognitionRequest = request
-
-        guard let speechRecognizer else {
-            throw LiveTranslateError.speechUnavailable
-        }
-
         recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self else { return }
-
-            if let result {
-                let text = result.bestTranscription.formattedString
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-
-                guard !text.isEmpty else { return }
-
-                Task { @MainActor in
-                    self.handleRecognizedText(text, isFinal: result.isFinal)
+            // Extract values before hopping actors; never log transcript text.
+            let text = result?.bestTranscription.formattedString
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let final = result?.isFinal == true
+            Task { @MainActor in
+                guard let self = self, self.sessionID == token,
+                      self.recognitionID == speechToken, self.isRunning else { return }
+                if let text = text, !text.isEmpty {
+                    self.onCaption?(text, "", !final)
                 }
-            }
-
-            if let error {
-                Task { @MainActor in
-                    guard self.isRunning else { return }
-                    NSLog("[SuperNotch] Live Translate speech error: %@", error.localizedDescription)
+                if final {
+                    self.renewRecognition(session: token)
+                } else if let error = error {
+                    self.fail(error)
                 }
             }
         }
+        NSLog("[SuperNotch] Live Translate Speech recognizer started (en-US, streaming partials)")
+        // Apple's online Speech tasks are time-limited. Rotate before one minute
+        // rather than silently abandoning recognition during a long meeting.
+        renewalTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: 50_000_000_000) }
+            catch { return }
+            guard let self = self, self.sessionID == token,
+                  self.recognitionID == speechToken, self.isRunning else { return }
+            self.renewRecognition(session: token)
+        }
+        return request
     }
 
-    private func startSystemAudioCapture() async throws {
-        // Do not gate ScreenCaptureKit behind CGPreflightScreenCaptureAccess().
-        // On some macOS builds, especially with replaced/unsigned app bundles,
-        // the CoreGraphics preflight can report false even though Screen &
-        // System Audio Recording is enabled in System Settings. ScreenCaptureKit
-        // is the authority here, so attempt capture directly and surface its
-        // real error if macOS rejects the session.
-        let content = try await SCShareableContent.excludingDesktopWindows(
-            false,
-            onScreenWindowsOnly: true
-        )
-
-        guard let display = preferredDisplay(in: content) else {
-            throw LiveTranslateError.noDisplay
-        }
-
-        let currentBundleID = Bundle.main.bundleIdentifier
-        let excludedApplications = content.applications.filter {
-            $0.bundleIdentifier == currentBundleID
-        }
-
-        let filter = SCContentFilter(
-            display: display,
-            excludingApplications: excludedApplications,
-            exceptingWindows: []
-        )
-
-        let configuration = SCStreamConfiguration()
-        configuration.width = 2
-        configuration.height = 2
-        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 2)
-        configuration.queueDepth = 2
-        configuration.showsCursor = false
-        configuration.capturesAudio = true
-        configuration.excludesCurrentProcessAudio = true
-        configuration.sampleRate = 48_000
-        configuration.channelCount = 2
-
-        let output = LiveTranslateStreamOutput { [weak self] sampleBuffer in
-            self?.recognitionRequest?.appendAudioSampleBuffer(sampleBuffer)
-        }
-
-        let stream = SCStream(filter: filter, configuration: configuration, delegate: output)
-        try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: audioQueue)
-
-        self.streamOutput = output
-        self.stream = stream
-        try await stream.startCapture()
-        NSLog("[SuperNotch] Live Translate system-audio capture started")
+    private func renewRecognition(session token: UUID) {
+        do {
+            let request = try startRecognition(session: token)
+            capture?.replaceRequest(request)
+        } catch { fail(error) }
     }
 
-    private func preferredDisplay(in content: SCShareableContent) -> SCDisplay? {
-        guard let notchScreen = NSScreen.screens.first(where: { NotchGeometry.measure($0) != nil }),
-              let screenNumber = notchScreen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
-            return content.displays.first
-        }
-
-        let displayID = CGDirectDisplayID(screenNumber.uint32Value)
-        return content.displays.first(where: { $0.displayID == displayID })
-            ?? content.displays.first
-    }
-
-    private func handleRecognizedText(_ text: String, isFinal: Bool) {
-        onCaption?(text, "", !isFinal)
-    }
-
-    private func stopInternals() {
+    private func stopInternals(wait: Bool = false) {
+        sessionID = UUID()
+        recognitionID = UUID()
+        startTask?.cancel()
+        startTask = nil
+        renewalTask?.cancel()
+        renewalTask = nil
+        capture?.stop(wait: wait)
+        capture = nil
+        if wait { LiveTranslateSystemAudioTap.waitForCleanup() }
         recognitionTask?.cancel()
         recognitionTask = nil
-
-        recognitionRequest?.endAudio()
         recognitionRequest = nil
-
-        if let stream {
-            Task {
-                try? await stream.stopCapture()
-            }
-        }
-
-        stream = nil
-        streamOutput = nil
-        NSLog("[SuperNotch] Live Translate stopped")
+        NSLog("[SuperNotch] Live Translate Speech recognizer stopped")
     }
 
     private func userFacingMessage(for error: Error) -> String {
@@ -429,20 +402,16 @@ final class SuperNotchLiveTranslateFeature: NSObject {
             return liveError.localizedDescription
         }
 
-        let nsError = error as NSError
-
-        NSLog(
-            "[SuperNotch] Live Translate failed: domain=%@ code=%ld message=%@",
-            nsError.domain,
-            nsError.code,
-            nsError.localizedDescription
-        )
-
-        if nsError.domain == "com.apple.ScreenCaptureKit.SCStreamErrorDomain" {
-            return "System audio capture gagal (SCStream error \(nsError.code)): \(nsError.localizedDescription)"
+        if let tapError = error as? SystemAudioTapError {
+            NSLog("[SuperNotch] Live Translate Core Audio failure: %@", tapError.localizedDescription)
+            return tapError.localizedDescription
         }
 
-        return "\(nsError.domain) (\(nsError.code)): \(nsError.localizedDescription)"
+        let nsError = error as NSError
+
+        // Error descriptions can contain service payloads; log only domain/code.
+        NSLog("[SuperNotch] Live Translate failed: domain=%@ code=%ld", nsError.domain, nsError.code)
+        return "Speech/audio service failed: \(nsError.domain) (\(nsError.code)). Check connectivity and try Start again."
     }
 }
 
@@ -507,31 +476,9 @@ private final class LiveTranslateShortcutCaptureView: NSView {
     }
 }
 
-private final class LiveTranslateStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
-    private let audioHandler: (CMSampleBuffer) -> Void
-
-    init(audioHandler: @escaping (CMSampleBuffer) -> Void) {
-        self.audioHandler = audioHandler
-    }
-
-    func stream(
-        _ stream: SCStream,
-        didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
-        of type: SCStreamOutputType
-    ) {
-        guard type == .audio, sampleBuffer.isValid else { return }
-        audioHandler(sampleBuffer)
-    }
-
-    func stream(_ stream: SCStream, didStopWithError error: Error) {
-        NSLog("[SuperNotch] Live Translate capture stopped: %@", error.localizedDescription)
-    }
-}
-
 private enum LiveTranslateError: LocalizedError {
     case speechPermission
     case speechUnavailable
-    case noDisplay
 
     var errorDescription: String? {
         switch self {
@@ -539,8 +486,6 @@ private enum LiveTranslateError: LocalizedError {
             return "Izinkan Speech Recognition untuk SuperNotch di System Settings → Privacy & Security."
         case .speechUnavailable:
             return "Speech Recognition sedang tidak tersedia."
-        case .noDisplay:
-            return "SuperNotch tidak menemukan display yang bisa dipakai untuk menangkap audio meeting."
         }
     }
 }

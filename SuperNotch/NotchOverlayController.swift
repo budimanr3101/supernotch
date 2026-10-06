@@ -48,18 +48,42 @@ final class NotchOverlayModel: ObservableObject {
         UserDefaults.standard.set(show, forKey: NotchOverlayModel.liveTranslateShowSourceKey)
     }
 
+    private var pendingTranslation: DispatchWorkItem?
+    private var lastRequestedSource = ""
+
+    func clearTranslation() {
+        pendingTranslation?.cancel()
+        pendingTranslation = nil
+        lastRequestedSource = ""
+        translationConfiguration = nil
+        translationSource = ""
+        translationTarget = ""
+        translationPartial = false
+    }
+
     func requestTranslation(source: String, partial: Bool) {
         translationSource = source
-        translationTarget = "Translating…"
         translationPartial = partial
-
-        var configuration = translationConfiguration
-            ?? TranslationSession.Configuration(
-                source: Locale.Language(identifier: "en"),
-                target: Locale.Language(identifier: "id")
-            )
-        configuration.invalidate()
-        translationConfiguration = configuration
+        guard source != lastRequestedSource else { return }
+        // Keep the previous translation readable while newer partials arrive.
+        if translationTarget.isEmpty { translationTarget = "Translating…" }
+        guard pendingTranslation == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.pendingTranslation = nil
+            guard !self.translationSource.isEmpty,
+                  self.translationSource != self.lastRequestedSource else { return }
+            self.lastRequestedSource = self.translationSource
+            var configuration = self.translationConfiguration
+                ?? TranslationSession.Configuration(
+                    source: Locale.Language(identifier: "en"),
+                    target: Locale.Language(identifier: "id")
+                )
+            configuration.invalidate()
+            self.translationConfiguration = configuration
+        }
+        pendingTranslation = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(250), execute: work)
     }
 }
 
@@ -202,6 +226,10 @@ private final class NotchSurfaceManager {
                 self.handleDidBecomeKey(window)
             }
         }
+    }
+
+    var hasVisiblePrimarySurface: Bool {
+        activeWindow?.isVisible == true
     }
 
     private func handleDidBecomeKey(_ window: NSWindow) {
@@ -511,7 +539,7 @@ final class NotchOverlayController {
         model.setTranslationShowsSource(show)
     }
 
-    func showLiveTranslate(source: String, target: String, partial: Bool) {
+    func showLiveTranslate(source: String, target: String, partial: Bool, present: Bool = true) {
         cancelTimers()
         guard preparePanel() else { return }
 
@@ -524,7 +552,18 @@ final class NotchOverlayController {
             model.translationTarget = target
             model.translationPartial = partial
         }
+        // Update the hosted translation task even while its panel is hidden.
+        // The engine and translation stay active; only presentation is suppressed.
+        guard present, !NotchSurfaceManager.shared.hasVisiblePrimarySurface else {
+            model.presented = false
+            panel?.orderOut(nil)
+            return
+        }
         revealFromHardwareNotchIfNeeded()
+    }
+
+    func clearLiveTranslation() {
+        model.clearTranslation()
     }
 
     func hide() {

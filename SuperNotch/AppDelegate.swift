@@ -69,20 +69,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // Live Translate keeps listening in the background, but the physical
             // notch has a single visual owner. Never let captions stack over
             // Terminal, Pocketbook, or Command Center.
-            guard !self.terminal.isVisible,
-                  !self.pocketbook.isVisible,
-                  !self.commandCenter.isVisible else {
-                return
-            }
+            let canPresent = !self.terminal.isVisible
+                && !self.pocketbook.isVisible
+                && !self.commandCenter.isVisible
 
             self.coordinator.showLiveTranslate(
                 source: source,
                 target: target,
-                partial: partial
+                partial: partial,
+                present: canPresent
             )
         }
-        liveTranslate.onStateChanged = { [weak self] _ in
+        liveTranslate.onStateChanged = { [weak self] state in
             self?.updateLiveTranslateUI()
+            if state == .idle { self?.coordinator.stopLiveTranslatePresentation() }
         }
         liveTranslate.onShortcutChanged = { [weak self] in
             self?.updateLiveTranslateUI()
@@ -101,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        liveTranslate.stop()
+        liveTranslate.stop(waitForCleanup: true)
         liveTranslate.uninstallShortcut()
         terminal.stop()
         pocketbook.stop()

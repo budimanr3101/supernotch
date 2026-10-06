@@ -149,9 +149,14 @@ final class ShelfCoordinator {
         scheduleRestore(after: 1.05)
     }
 
-    func showLiveTranslate(source: String, target: String, partial: Bool) {
+    func showLiveTranslate(source: String, target: String, partial: Bool, present: Bool = true) {
         cancelProjectPreviewRestore()
-        overlay.showLiveTranslate(source: source, target: target, partial: partial)
+        overlay.showLiveTranslate(source: source, target: target, partial: partial, present: present)
+    }
+
+    func stopLiveTranslatePresentation() {
+        overlay.clearLiveTranslation()
+        restoreShelfOverlay()
     }
 
     func setLiveTranslateShowsSource(_ show: Bool) {
