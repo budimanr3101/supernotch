@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import Combine
 import Foundation
 import Speech
 
@@ -89,6 +90,7 @@ final class SuperNotchLiveTranslateFeature: NSObject {
     private var shortcut: LiveTranslateShortcut
     private var hotKey: EventHotKeyRef?
     private var shortcutInstalled = false
+    private var enabledSubscription: AnyCancellable?
     private var state: State = .idle {
         didSet { onStateChanged?(state) }
     }
@@ -106,6 +108,15 @@ final class SuperNotchLiveTranslateFeature: NSObject {
             shortcut = .defaultShortcut
         }
         super.init()
+        // Settings → Features writes the registry directly, independently of
+        // the menu's setFeatureEnabled path. Both must stop active capture.
+        enabledSubscription = registry.$enabled.sink { [weak self] enabled in
+            guard !enabled.contains(.liveTranslate) else { return }
+            Task { @MainActor in
+                guard let self = self, self.isRunning else { return }
+                self.stop()
+            }
+        }
     }
 
     var isRunning: Bool {

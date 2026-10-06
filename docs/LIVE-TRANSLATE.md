@@ -27,7 +27,8 @@ before appending to Speech; HAL memory never escapes its callback. Planar and
 interleaved PCM use the actual ASBD, not assumed 48 kHz stereo strides. Overflow
 drops new chunks, with bounded technical diagnostics. Malformed/oversized PCM
 fails safely. CI tests buffer reuse, both layouts, three sample rates, overflow
-and malformed input under AddressSanitizer.
+and malformed input under AddressSanitizer. A concurrent producer/consumer stress
+check runs under ThreadSanitizer. Disabling via Settings or the menu stops capture.
 
 Start cancellation uses session tokens. Stop invalidates callbacks immediately;
 worker cleanup stops/destroys IOProc, aggregate and tap, removes property

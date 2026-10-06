@@ -65,6 +65,10 @@ jobs:
             SuperNotch/SystemAudioTap.swift Tests/LiveTranslateAudioTests.swift \
             "$RUNNER_TEMP/PCMQueue.o" -o "$RUNNER_TEMP/live-translate-audio-tests"
           "$RUNNER_TEMP/live-translate-audio-tests"
+          xcrun clang -std=c11 -Wall -Wextra -Werror -isysroot "$SDK" -mmacosx-version-min=15.0 \
+            -fsanitize=thread SuperNotch/PCMQueue.c Tests/PCMQueueStressTests.c \
+            -o "$RUNNER_TEMP/pcm-queue-stress"
+          "$RUNNER_TEMP/pcm-queue-stress"
 
       - name: Validate shared scheme
         run: |
