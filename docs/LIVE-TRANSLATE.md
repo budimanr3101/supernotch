@@ -38,7 +38,8 @@ rebuild capture with a fresh converter and Speech request. Online Speech request
 rotate every 50 seconds and after final results; service failures are reported,
 rather than showing an apparently listening but dead engine.
 
-Translation partials are coalesced to at most four requests per second. Existing
+Translation partials are coalesced to at most four requests per second, with only
+one translation in flight so rapid partials cannot starve it through cancellation. Existing
 translations remain readable while a new partial is processed. The hosted task
 continues when the panel is suppressed. NotchSurfaceManager remains the visual
 owner; Terminal, Pocketbook and Command Center hide subtitles without stopping

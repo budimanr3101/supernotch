@@ -121,9 +121,11 @@ struct SuperNotchView: View {
             )
             .ignoresSafeArea()
             .translationTask(model.translationConfiguration) { session in
+                let generation = model.translationGeneration
+                defer { model.finishTranslation(generation: generation) }
                 guard model.state == .liveTranslate else { return }
 
-                let source = model.translationSource
+                let source = model.translationRequestSource
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !source.isEmpty else { return }
 
@@ -131,12 +133,12 @@ struct SuperNotchView: View {
                     let response = try await session.translate(source)
                     guard !Task.isCancelled, model.state == .liveTranslate,
                           model.translationConfiguration != nil,
-                          model.translationSource == source else { return }
+                          model.translationGeneration == generation else { return }
                     model.translationTarget = response.targetText
                 } catch {
                     guard !Task.isCancelled, model.state == .liveTranslate,
                           model.translationConfiguration != nil,
-                          model.translationSource == source else { return }
+                          model.translationGeneration == generation else { return }
                     model.translationTarget = "Terjemahan tidak tersedia. Periksa koneksi dan model bahasa English/Indonesian."
                     model.translationPartial = false
                     let failure = error as NSError

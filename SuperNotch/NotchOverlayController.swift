@@ -50,11 +50,17 @@ final class NotchOverlayModel: ObservableObject {
 
     private var pendingTranslation: DispatchWorkItem?
     private var lastRequestedSource = ""
+    private var translationInFlight = false
+    private(set) var translationRequestSource = ""
+    private(set) var translationGeneration = UUID()
 
     func clearTranslation() {
         pendingTranslation?.cancel()
         pendingTranslation = nil
         lastRequestedSource = ""
+        translationInFlight = false
+        translationRequestSource = ""
+        translationGeneration = UUID()
         translationConfiguration = nil
         translationSource = ""
         translationTarget = ""
@@ -67,13 +73,16 @@ final class NotchOverlayModel: ObservableObject {
         guard source != lastRequestedSource else { return }
         // Keep the previous translation readable while newer partials arrive.
         if translationTarget.isEmpty { translationTarget = "Translating…" }
-        guard pendingTranslation == nil else { return }
+        guard pendingTranslation == nil, !translationInFlight else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             self.pendingTranslation = nil
             guard !self.translationSource.isEmpty,
                   self.translationSource != self.lastRequestedSource else { return }
+            guard self.state == .liveTranslate else { return }
             self.lastRequestedSource = self.translationSource
+            self.translationRequestSource = self.translationSource
+            self.translationInFlight = true
             var configuration = self.translationConfiguration
                 ?? TranslationSession.Configuration(
                     source: Locale.Language(identifier: "en"),
@@ -84,6 +93,15 @@ final class NotchOverlayModel: ObservableObject {
         }
         pendingTranslation = work
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(250), execute: work)
+    }
+    func finishTranslation(generation: UUID) {
+        guard generation == translationGeneration else { return }
+        translationInFlight = false
+        // Never cancel a running translation for newer Speech partials. Once it
+        // finishes, translate the newest available text and discard intermediates.
+        if !translationSource.isEmpty && translationSource != lastRequestedSource {
+            requestTranslation(source: translationSource, partial: translationPartial)
+        }
     }
 }
 
